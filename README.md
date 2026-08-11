@@ -7,9 +7,10 @@
 ## 功能特性
 
 - `blender_manifest.toml` 标准清单：唯一标识、平台、权限、许可证（SPDX）等。
-- 模块化结构：偏好设置、属性、操作符、面板、快捷键、纯逻辑工具分层清晰。
-- 示例操作符：`shimakaze.hello`、`shimakaze.bump_asset_version`。
-- 快捷键以 `type="NONE"` 注册，不占用任何默认热键，用户可按需绑定。
+- 模块化结构：属性、操作符、面板、纯逻辑工具分层清晰。
+- CnC 模板场景导入：SHP 侧边栏面板中以向导形式选择游戏（Red Alert / Tiberian
+  Dawn / Red Alert 2 / Tiberian Sun），RA2/TS 可选步兵模板，一键导入并命名为
+  `<游戏名>[ - Infantry]`；当前选中的物体（不创建副本）会链接进新导入的场景。
 - 版本号单一来源：`__init__.py` 直接读取清单中的 `version`。
 - 构建脚本（`build.ps1` / `Makefile`）与 GitHub Actions CI。
 
@@ -92,11 +93,9 @@ dependencies = ["requests>=2.31"]
 ├── extension/                  # 扩展源码目录（清单与包同层）
 │   ├── blender_manifest.toml   # 扩展清单（扩展的“身份证”）
 │   ├── __init__.py             # 入口：版本单一来源 + register/unregister
-│   ├── preferences.py          # AddonPreferences（bl_idname = __package__）
-│   ├── properties.py           # PropertyGroup，挂载到 bpy.types.Scene
-│   ├── operators.py            # Operator 定义
-│   ├── ui.py                   # 3D 视图侧边栏面板
-│   ├── keymap.py               # 快捷键注册与清理
+│   ├── properties.py           # PropertyGroup，挂载到 bpy.types.WindowManager
+│   ├── operators.py            # 模板场景导入 Operator
+│   ├── ui.py                   # 3D 视图侧边栏 SHP 面板
 │   └── utils.py                # 纯逻辑工具
 ├── build.ps1                   # Windows 构建脚本
 ├── Makefile                    # macOS/Linux 构建与开发命令

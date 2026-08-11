@@ -29,7 +29,7 @@ platforms = ["windows-x64", "windows-arm64", "macos-x64", "macos-arm64", "linux-
 license = ["SPDX:MIT"]
 copyright = ["2026 frg2089"]
 
-location = "3D Viewport > Sidebar > Shimakaze SDK"
+location = "3D Viewport > Sidebar > SHP"
 tags = ["3D View", "Development"]
 
 # Dependencies on *other Blender extensions*.

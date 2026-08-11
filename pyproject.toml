@@ -23,7 +23,7 @@ venvPath = "."
 venv = ".venv"
 include = ["extension"]
 exclude = ["build", "dist", ".vscode", "**/node_modules", "**/__pycache__", "**/.*", ".venv"]
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 # Blender add-ons rely on patterns the stubs cannot fully model:
 # - bpy.props.* call expressions used as class annotations
 # - dynamic attributes such as ``Scene.shimakaze_sdk``

@@ -31,9 +31,9 @@ def _read_version() -> str:
 __version__ = _read_version()
 __version_info__ = tuple(int(part) for part in __version__.split("."))
 
-# Registration order matters: preferences and properties first, then the
-# operators, UI and keymap that reference them.
-_ADDON_MODULES = ("preferences", "properties", "operators", "ui", "keymap")
+# Registration order matters: properties first, then the operators and UI
+# that reference them.
+_ADDON_MODULES = ("properties", "operators", "ui")
 
 
 def register() -> None:
