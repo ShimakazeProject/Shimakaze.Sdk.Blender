@@ -1,0 +1,35 @@
+# Development tooling configuration.
+#
+# NOTE: this file intentionally has no `[project]` table. Blender 4.3+
+# reads `[project] dependencies` from `pyproject.toml` to bundle Python
+# packages into the built extension. If you add runtime dependencies, add a
+# `[project]` table with `dependencies = [...]` (see README).
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+include = ["extension"]
+exclude = ["build", "dist", ".vscode", "**/node_modules", "**/__pycache__", "**/.*", ".venv"]
+typeCheckingMode = "strict"
+# Blender add-ons rely on patterns the stubs cannot fully model:
+# - bpy.props.* call expressions used as class annotations
+# - dynamic attributes such as ``Scene.shimakaze_sdk``
+# - loosely typed structures (e.g. ``UILayout`` may be Optional)
+reportInvalidTypeForm = false
+reportAttributeAccessIssue = false
+reportOptionalMemberAccess = false
+# bpy is provided as a stub-only package, so there is no runtime source to resolve.
+reportMissingModuleSource = "none"

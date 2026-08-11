@@ -1,0 +1,42 @@
+schema_version = "1.0.0"
+
+# Unique identifier. Must be a valid Python identifier (no dots).
+id = "shimakaze_sdk_blender"
+
+name = "Shimakaze SDK"
+tagline = "Blender SDK scaffold following best practices"
+version = "0.1.0"
+
+type = "add-on"
+
+# Blender 4.5 ships with Python 3.11. Keep in sync with the Blender version.
+blender_version_min = "4.5.0"
+python_version = "3.11"
+
+# Optionally cap the highest Blender version this add-on has been tested against.
+# Leaving it unset keeps the add-on enabled on future releases.
+# blender_version_max = "4.6.0"
+
+maintainer = "frg2089 <frg2089@outlook.com>"
+
+# Declare exactly the permissions you need. The SDK scaffold needs none yet.
+permissions = {}
+
+# Platform values include an architecture, e.g. "windows-x64".
+platforms = ["windows-x64", "windows-arm64", "macos-x64", "macos-arm64", "linux-x64", "linux-aarch64"]
+
+# SPDX license identifiers.
+license = ["SPDX:MIT"]
+copyright = ["2026 frg2089"]
+
+location = "3D Viewport > Sidebar > Shimakaze SDK"
+tags = ["3D View", "Development"]
+
+# Dependencies on *other Blender extensions*.
+# [dependencies]
+# com.example.some_extension = { version_min = "1.0.0", version_max = "2.0.0" }
+
+# Optional documentation bundle / links.
+# [documentation]
+# embedded = "docs/index.html"
+# uri = "https://example.com/shimakaze-sdk/docs"

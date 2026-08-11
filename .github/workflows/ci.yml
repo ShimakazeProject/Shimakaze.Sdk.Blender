@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tooling
+        run: pip install ruff pyright
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Type check
+        run: pyright
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Blender 4.5
+        run: |
+          curl -fsSL -o blender.tar.xz \
+            https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
+          mkdir -p blender
+          tar -xf blender.tar.xz -C blender --strip-components=1
+
+      - name: Build extension
+        run: ./blender/blender --command extension build --source-dir extension --output-dir dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shimakaze-sdk
+          path: dist/*.zip
