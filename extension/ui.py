@@ -28,6 +28,14 @@ class Shimakaze_PT_scene(Panel):
 
         layout.separator()
 
+        layout.label(text="渲染通道")
+        layout.operator("shimakaze.shp_buildup")
+        layout.operator("shimakaze.shp_object")
+        layout.operator("shimakaze.shp_reset")
+        layout.operator("shimakaze.shp_shadow")
+
+        layout.separator()
+
         layout.label(text="SHP Settings")
         layout.prop(scene_settings, "faces")
         layout.prop(scene_settings, "reverse")

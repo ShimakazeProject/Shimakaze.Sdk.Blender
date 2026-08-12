@@ -11,6 +11,9 @@
 - CnC 模板场景导入：SHP 侧边栏面板中以向导形式选择游戏（Red Alert / Tiberian
   Dawn / Red Alert 2 / Tiberian Sun），RA2/TS 可选步兵模板，一键导入并命名为
   `<游戏名>[ - Infantry]`；当前选中的物体（不创建副本）会链接进新导入的场景。
+- 渲染通道按钮（Buildup / Object / Reset / Shadow）：对当前 blend 文件中
+  名称匹配模板场景（如 Red Alert 2、Tiberian Sun）的场景批量设置渲染通道状态，
+  适用于任意 blend 文件。
 - 版本号单一来源：`__init__.py` 直接读取清单中的 `version`。
 - 构建脚本（`build.ps1` / `Makefile`）与 GitHub Actions CI。
 

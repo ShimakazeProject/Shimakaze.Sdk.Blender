@@ -102,7 +102,66 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         return target
 
 
-_CLASSES = (Shimakaze_OT_import_cnc_scene,)
+class Shimakaze_OT_shp_pass(ShimakazeSDKBaseOperator):
+    """Apply one SHP render pass to CnC scenes in the current file.
+
+    These passes mirror the bundled tmp scripts and operate on any scene in
+    the open blend whose name matches a template scene name.
+    """
+
+    pass_name: str = ""
+
+    def execute(self, context) -> set[OperatorReturnItems]:
+        touched, object_count = utils.apply_shp_pass(self.pass_name)
+        if not touched:
+            self.report(
+                {"ERROR"},
+                "当前文件未找到 CnC 模板场景（如 Red Alert 2 / Tiberian Sun），"
+                "请先打开包含这些场景的 blend 文件",
+            )
+            return {"CANCELLED"}
+        self.report(
+            {"INFO"},
+            f"已应用 {self.bl_label} 到 {len(touched)} 个模板场景（{object_count} 个物体）",
+        )
+        return {"FINISHED"}
+
+
+class Shimakaze_OT_shp_buildup(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_buildup"
+    bl_label = "Buildup"
+    bl_description = "建造动画通道：蓝面可见，透明材质，用于渲染建造动画"
+    pass_name = "buildup"
+
+
+class Shimakaze_OT_shp_object(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_object"
+    bl_label = "Object"
+    bl_description = "物体通道：隐藏全部平面（模板）"
+    pass_name = "object"
+
+
+class Shimakaze_OT_shp_reset(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_reset"
+    bl_label = "Reset"
+    bl_description = "重置通道：灰面可见（模板）"
+    pass_name = "reset"
+
+
+class Shimakaze_OT_shp_shadow(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_shadow"
+    bl_label = "Shadow"
+    bl_description = "阴影通道：pass_index=1，关闭 AO（模板）"
+    pass_name = "shadow"
+
+
+_CLASSES = (
+    Shimakaze_OT_import_cnc_scene,
+    Shimakaze_OT_shp_buildup,
+    Shimakaze_OT_shp_object,
+    Shimakaze_OT_shp_reset,
+    Shimakaze_OT_shp_shadow,
+)
 
 
 def register() -> None:
