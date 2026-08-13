@@ -101,8 +101,17 @@ dependencies = ["requests>=2.31"]
 ├── extension/                  # 扩展源码目录（清单与包同层）
 │   ├── blender_manifest.toml   # 扩展清单（扩展的“身份证”）
 │   ├── __init__.py             # 入口：版本单一来源 + register/unregister
+│   ├── adaptations/            # 按渲染器分目录的模板适配
+│   │   ├── __init__.py         # 运行时按版本分发（get_template_file_name/repair_compositor）
+│   │   ├── _common.py          # 节点插座操作公共工具
+│   │   ├── eevee_next/         # Blender 4.x：模板文件名 + 合成器修复
+│   │   │   ├── __init__.py
+│   │   │   └── compositor.py
+│   │   └── hi_five/            # Blender 5.x：模板文件名 + 合成器修复
+│   │       ├── __init__.py
+│   │       └── compositor.py
 │   ├── properties.py           # PropertyGroup，挂载到 bpy.types.WindowManager
-│   ├── operators.py            # 模板场景导入 Operator
+│   ├── operators.py            # 模板场景导入 + 渲染通道 + 批量渲染
 │   ├── ui.py                   # 3D 视图侧边栏 SHP 面板
 │   └── utils.py                # 纯逻辑工具
 ├── build.ps1                   # Windows 构建脚本

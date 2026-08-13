@@ -15,6 +15,12 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
+from .adaptations import (
+    current_template_renderer,
+    get_template_file_name,
+    repair_compositor,
+)
+
 if TYPE_CHECKING:
     from bpy.types import Collection, Object
 
@@ -27,29 +33,6 @@ if TYPE_CHECKING:
 # never use "latest".
 CNC_TEMPLATE_REPO = "Zawaro/blender-cnc-templates"
 CNC_TEMPLATE_VERSION = "v1.1.0"
-
-#: File name of the bundled Eevee Next template (Blender 4.2+).
-CNC_TEMPLATE_FILE = "CnC_EeveeNext_1.1.0_build91_20260811.blend"
-
-#: Template file name for the Hi Five renderer (Blender 5.x).
-CNC_TEMPLATE_FILE_HI5 = "CnC_HiFive_1.1.0_build91_20260811.blend"
-
-
-def current_template_renderer() -> str:
-    """Return the template renderer folder matching the running Blender.
-
-    Blender 4.2+ uses Eevee Next; Blender 5.x uses the "Hi Five" template.
-    """
-    import bpy
-
-    if bpy.app.version[0] >= 5:
-        return "hi_five"
-    return "eevee_next"
-
-
-def _renderer_display(renderer: str) -> str:
-    """Pretty asset keyword for a renderer folder (``eevee_next`` -> ``EeveeNext``)."""
-    return {"eevee_next": "EeveeNext", "hi_five": "HiFive"}.get(renderer, renderer)
 
 
 #: CnC games selectable in the wizard, keyed by enum identifier.
@@ -100,14 +83,7 @@ def get_scene_compositor(scene):
 
 def get_cnc_template_path() -> Path:
     """Return the path of the template for the running Blender version."""
-    renderer = current_template_renderer()
-    if renderer == "eevee_next":
-        name = CNC_TEMPLATE_FILE
-    elif renderer == "hi_five":
-        name = CNC_TEMPLATE_FILE_HI5
-    else:
-        name = f"CnC_{_renderer_display(renderer)}_{CNC_TEMPLATE_VERSION}.blend"
-    return Path(__file__).resolve().parent / name
+    return Path(__file__).resolve().parent / get_template_file_name()
 
 
 def ensure_template() -> Path:
@@ -344,7 +320,7 @@ def apply_shp_pass_to_scene(scene, pass_name: str) -> bool:
 
     Toggles the pass switch chain and the visibility of every ``Plane.*``
     object in the scene (detected by name, so imported/renamed scenes work
-    too). Also repairs the Alpha Over wiring. Returns True when the scene has
+    too). Also repairs the compositor wiring. Returns True when the scene has
     a compositor to drive.
     """
     import bpy
@@ -354,8 +330,7 @@ def apply_shp_pass_to_scene(scene, pass_name: str) -> bool:
     if node_tree is None:
         return False
 
-    if current_template_renderer() in ("eevee_next", "hi_five"):
-        repair_compositor(node_tree)
+    repair_compositor(node_tree)
     for node in node_tree.nodes.values():
         if node is not None and node.type == "SWITCH":
             on = any(node.name.startswith(prefix) for prefix in config["switch_prefixes"])
@@ -389,191 +364,3 @@ def set_switch(node, value: bool) -> None:
         switch_input = node.inputs.get("Switch")
         if switch_input is not None:
             switch_input.default_value = value
-
-
-def repair_alpha_over(node_tree) -> bool:
-    """Fix the compositor's Alpha Over foreground/background wiring.
-
-    The template ships with the Alpha Over sockets swapped: the left node has
-    an empty Image 1, and the right node has Image 1/Image 2 reversed, so the
-    sprite never composites over the correct background. This rewires them at
-    runtime without modifying the template file. Returns True if anything was
-    changed.
-    """
-    alpha_switch = node_tree.nodes.get("Alpha")
-    alpha_over = node_tree.nodes.get("Alpha Over")
-    alpha_over_1 = node_tree.nodes.get("Alpha Over.001")
-    if alpha_switch is None or alpha_over is None or alpha_over_1 is None:
-        return False
-
-    group = node_tree.nodes.get("Group")
-    color_ramp = node_tree.nodes.get("Color Ramp")
-    changed = False
-
-    def first_output(node, *names):
-        """Return the first output socket matching a name, else the first one."""
-        for name in names:
-            socket = node.outputs.get(name)
-            if socket is not None:
-                return socket
-        return node.outputs[0]
-
-    def find_input(node, name: str, fallback_index: int | None = None):
-        """Return an input socket by name, falling back to an index."""
-        socket = node.inputs.get(name)
-        if socket is not None:
-            return socket
-        if fallback_index is not None:
-            return node.inputs[fallback_index]
-        return node.inputs[0]
-
-    def set_input(node, target: str, from_socket, fallback_index: int | None) -> None:
-        nonlocal changed
-        socket = find_input(node, target, fallback_index)
-        current = next(iter(socket.links), None)
-        if current is not None and current.from_socket is from_socket:
-            return
-        for link in list(socket.links):
-            node_tree.links.remove(link)
-        node_tree.links.new(from_socket, socket)
-        changed = True
-
-    def clear_input(node, target: str, fallback_index: int | None) -> None:
-        nonlocal changed
-        socket = find_input(node, target, fallback_index)
-        if socket.links:
-            for link in list(socket.links):
-                node_tree.links.remove(link)
-            changed = True
-
-    alpha_output = first_output(alpha_switch, "Image", "Output")
-
-    # Left Alpha Over: foreground <- Alpha, background <- Alpha Convert (Group).
-    # Blender 4.x inputs are (Fac, Image, Image); 5.x reordered them to
-    # (Background, Foreground, Factor, Type, Straight Alpha).
-    set_input(alpha_over, "Foreground", alpha_output, 1)
-    if group is not None:
-        set_input(alpha_over, "Background", first_output(group, "Image"), 2)
-    else:
-        clear_input(alpha_over, "Background", 2)
-
-    # Right Alpha Over.001: foreground <- Alpha, background <- Color Ramp.
-    set_input(alpha_over_1, "Foreground", alpha_output, 1)
-    if color_ramp is not None:
-        set_input(alpha_over_1, "Background", first_output(color_ramp, "Color"), 2)
-    else:
-        clear_input(alpha_over_1, "Background", 2)
-
-    return changed
-
-
-def repair_hi_five_compositor(node_tree) -> bool:
-    """Fix the Hi Five template's scrambled compositor wiring.
-
-    The 5.x conversion of the Eevee Next template left the compositor
-    mis-wired: the pass switch chain is fed through the control input, and the
-    Alpha Over sockets landed in the wrong places. This rewires everything to
-    match the patched Eevee Next layout.
-    """
-    changed = False
-
-    render_layers = next((n for n in node_tree.nodes.values() if n.type == "R_LAYERS"), None)
-    alpha_over = node_tree.nodes.get("Alpha Over")
-    alpha_over_1 = node_tree.nodes.get("Alpha Over.001")
-    alpha_switch = node_tree.nodes.get("Alpha")
-    group = node_tree.nodes.get("Group")
-    color_ramp = node_tree.nodes.get("Color Ramp")
-    bg_rgb = node_tree.nodes.get("BackgroundRGB")
-    bg_alpha = node_tree.nodes.get("BackgroundAlpha")
-    if alpha_over is None or alpha_over_1 is None or alpha_switch is None:
-        return False
-
-    def first_output(node, *names):
-        for name in names:
-            socket = node.outputs.get(name)
-            if socket is not None:
-                return socket
-        return node.outputs[0]
-
-    def find_input(node, name: str, fallback_index: int | None = None):
-        socket = node.inputs.get(name)
-        if socket is not None:
-            return socket
-        if fallback_index is not None:
-            return node.inputs[fallback_index]
-        return node.inputs[0]
-
-    def set_input(node, target: str, from_socket, fallback_index: int | None) -> None:
-        nonlocal changed
-        socket = find_input(node, target, fallback_index)
-        current = next(iter(socket.links), None)
-        if current is not None and current.from_socket is from_socket:
-            return
-        for link in list(socket.links):
-            node_tree.links.remove(link)
-        node_tree.links.new(from_socket, socket)
-        changed = True
-
-    def clear_input(node, target: str, fallback_index: int | None) -> None:
-        nonlocal changed
-        socket = find_input(node, target, fallback_index)
-        if socket.links:
-            for link in list(socket.links):
-                node_tree.links.remove(link)
-            changed = True
-
-    alpha_output = first_output(alpha_switch, "Image", "Output")
-
-    # Alpha switch: control unlinked, False <- BackgroundRGB, True <- BackgroundAlpha.
-    clear_input(alpha_switch, "Switch", 0)
-    if bg_rgb is not None:
-        set_input(alpha_switch, "False", first_output(bg_rgb, "Color"), 1)
-    if bg_alpha is not None:
-        set_input(alpha_switch, "True", first_output(bg_alpha, "Color"), 2)
-
-    # Alpha Over: Background <- Alpha, Foreground <- content, Factor left clear.
-    set_input(alpha_over, "Background", alpha_output, 0)
-    clear_input(alpha_over, "Factor", 2)
-    if group is not None:
-        set_input(alpha_over, "Foreground", first_output(group, "Image"), 1)
-
-    set_input(alpha_over_1, "Background", alpha_output, 0)
-    clear_input(alpha_over_1, "Factor", 2)
-    if color_ramp is not None:
-        set_input(alpha_over_1, "Foreground", first_output(color_ramp, "Color"), 1)
-
-    # Pass switch chain: control unlinked, False <- passthrough, True <- composited.
-    chain = (
-        "Object",
-        "Buildup.Cycles",
-        "Buildup.Eevee",
-        "Shadow.Cycles",
-        "Shadow.Eevee",
-        "Preview.Cycles",
-        "Preview.Eevee",
-    )
-    prev_output = first_output(render_layers, "Image") if render_layers is not None else None
-    alpha_over_out = first_output(alpha_over, "Image")
-    alpha_over_1_out = first_output(alpha_over_1, "Image")
-    for name in chain:
-        switch = node_tree.nodes.get(name)
-        if switch is None:
-            continue
-        clear_input(switch, "Switch", 0)
-        if prev_output is not None:
-            set_input(switch, "False", prev_output, 1)
-        on_source = alpha_over_1_out if name.startswith("Shadow") else alpha_over_out
-        set_input(switch, "True", on_source, 2)
-        prev_output = first_output(switch, "Output", "Image")
-
-    return changed
-
-
-def repair_compositor(node_tree) -> bool:
-    """Repair the template compositor for the running Blender's renderer."""
-    renderer = current_template_renderer()
-    if renderer == "eevee_next":
-        return repair_alpha_over(node_tree)
-    if renderer == "hi_five":
-        return repair_hi_five_compositor(node_tree)
-    return False
