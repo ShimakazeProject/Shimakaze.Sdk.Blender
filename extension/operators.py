@@ -110,23 +110,16 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
 
 
 class Shimakaze_OT_shp_pass(ShimakazeSDKBaseOperator):
-    """Apply one SHP render pass to every CnC scene in the current file."""
+    """Apply one SHP render pass to the active scene."""
 
     pass_name: str = ""
 
     def execute(self, context) -> set[OperatorReturnItems]:
-        touched = utils.apply_shp_pass(self.pass_name)
-        if not touched:
-            self.report(
-                {"ERROR"},
-                "当前文件未找到 CnC 模板场景（如 Red Alert 2 / Tiberian Sun），"
-                "请先打开包含这些场景的 blend 文件",
-            )
+        if not utils.apply_shp_pass_to_scene(context.scene, self.pass_name):
+            self.report({"ERROR"}, "当前场景不是有效的模板场景")
             return {"CANCELLED"}
-        self.report(
-            {"INFO"},
-            f"已应用 {self.bl_label} 到 {len(touched)} 个模板场景",
-        )
+        context.scene.shimakaze_sdk.active_pass = self.pass_name
+        self.report({"INFO"}, f"已应用 {self.bl_label} 到当前场景")
         return {"FINISHED"}
 
 
@@ -165,6 +158,58 @@ class Shimakaze_OT_shp_reset(Shimakaze_OT_shp_pass):
     pass_name = "reset"
 
 
+class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
+    bl_idname = "shimakaze.render_batch"
+    bl_label = "批量渲染"
+    bl_description = "按方向数批量渲染 SHP 动画帧：每方向渲染动画并旋转目标"
+
+    def execute(self, context) -> set[OperatorReturnItems]:
+        scene = context.scene
+        settings = scene.shimakaze_sdk
+        if not settings.is_imported:
+            self.report({"ERROR"}, "请先导入模板场景再批量渲染")
+            return {"CANCELLED"}
+
+        target = settings.target
+        if target is None:
+            self.report({"ERROR"}, "未找到目标空对象")
+            return {"CANCELLED"}
+
+        faces = settings.faces
+        if not utils.is_valid_direction_count(faces):
+            self.report({"ERROR"}, "方向数必须是 1 或 8 的倍数")
+            return {"CANCELLED"}
+
+        pass_name = settings.active_pass
+        if pass_name not in utils.SHP_PASSES:
+            self.report({"ERROR"}, f"无效的渲染通道：{pass_name}")
+            return {"CANCELLED"}
+        if not utils.apply_shp_pass_to_scene(scene, pass_name):
+            self.report({"ERROR"}, "当前场景不是有效的模板场景")
+            return {"CANCELLED"}
+
+        output_template = settings.output_template or "//<template>/<face>/"
+        step = radians(360 / faces)
+        if settings.reverse:
+            step = -step
+
+        scene.render.use_file_extension = True
+        for face in range(faces):
+            filepath = output_template.replace("<template>", pass_name).replace("<face>", str(face))
+            if "<frame>" in filepath:
+                filepath = filepath.replace("<frame>", "####")
+            if not filepath.endswith(("/", "\\")):
+                filepath += "/"
+            scene.render.filepath = filepath
+            bpy.ops.render.render(animation=True)
+            target.rotation_euler[2] += step
+
+        target.rotation_euler[2] = radians(225)
+
+        self.report({"INFO"}, f"批量渲染完成：{pass_name} × {faces} 方向")
+        return {"FINISHED"}
+
+
 _CLASSES = (
     Shimakaze_OT_import_cnc_scene,
     Shimakaze_OT_shp_object,
@@ -172,6 +217,7 @@ _CLASSES = (
     Shimakaze_OT_shp_shadow,
     Shimakaze_OT_shp_preview,
     Shimakaze_OT_shp_reset,
+    Shimakaze_OT_render_batch,
 )
 
 

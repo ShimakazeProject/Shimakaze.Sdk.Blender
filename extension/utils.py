@@ -93,22 +93,6 @@ def resolve_cnc_scene(game: str, variant: str) -> tuple[str, str]:
     return f"{template_name}{scene_suffix}", f"{CNC_GAME_OPTIONS[game]}{scene_suffix}"
 
 
-def template_games() -> list[tuple[str, str]]:
-    """Unique (template scene name, plane code) pairs, in dropdown order.
-
-    RA and TD both resolve to the same template game, so it is only listed
-    once here.
-    """
-    seen: set[tuple[str, str]] = set()
-    result: list[tuple[str, str]] = []
-    for template_name, code in CNC_TEMPLATE_GAME.values():
-        pair = (template_name, code)
-        if pair not in seen:
-            seen.add(pair)
-            result.append(pair)
-    return result
-
-
 def is_valid_direction_count(value: int) -> bool:
     """Return True if a direction count is 1 or a multiple of 8."""
     return value == 1 or value % 8 == 0
@@ -240,39 +224,34 @@ SHP_PASSES: dict[str, ShpPassConfig] = {
 }
 
 
-def apply_shp_pass(pass_name: str) -> list[str]:
-    """Apply a render-pass setup to every CnC scene in the open blend.
+def apply_shp_pass_to_scene(scene, pass_name: str) -> bool:
+    """Apply a render-pass setup to a single scene.
 
-    Toggles the pass switch chain and the per-scene plane visibility for all
-    template scenes that exist in the current file. Returns the scene names
-    that were touched.
+    Toggles the pass switch chain and the visibility of every ``Plane.*``
+    object in the scene (detected by name, so imported/renamed scenes work
+    too). Also repairs the Alpha Over wiring. Returns True when the scene has
+    a compositor to drive.
     """
     import bpy
 
     config = SHP_PASSES[pass_name]
-    touched: list[str] = []
+    node_tree: CompositorNodeTree | None = scene.node_tree
+    if node_tree is None:
+        return False
 
-    for template_name, code in template_games():
-        for _variant, (scene_suffix, object_suffix, _label) in CNC_VARIANT_OPTIONS.items():
-            scene = bpy.data.scenes.get(f"{template_name}{scene_suffix}")
-            if scene is None:
-                continue
+    repair_alpha_over(node_tree)
+    for node in node_tree.nodes.values():
+        if node is not None and node.name in _PASS_SWITCH_NAMES:
+            node.check = node.name in config["switches"]
 
-            node_tree: CompositorNodeTree | None = scene.node_tree
-            if node_tree is not None:
-                repair_alpha_over(node_tree)
-                for node in node_tree.nodes.values():
-                    if node is not None and node.name in _PASS_SWITCH_NAMES:
-                        node.check = node.name in config["switches"]
+    for obj in bpy.data.objects:
+        if obj.name not in scene.objects or not obj.name.startswith("Plane."):
+            continue
+        parts = obj.name.split(".")
+        if len(parts) >= 2 and parts[1] in config["planes"]:
+            obj.hide_render = config["planes"][parts[1]]
 
-            for plane_type, hide in config["planes"].items():
-                plane = bpy.data.objects.get(f"Plane.{plane_type}.{code}{object_suffix}")
-                if plane is not None:
-                    plane.hide_render = hide
-
-            touched.append(scene.name)
-
-    return touched
+    return True
 
 
 def repair_alpha_over(node_tree) -> bool:

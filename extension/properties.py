@@ -1,7 +1,7 @@
 """Data model for the SHP workflow, stored on the scene and window manager."""
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import PropertyGroup
 
 from . import utils
@@ -36,6 +36,20 @@ class ShimakazeSceneSettings(PropertyGroup):
         name="模板导入",
         description="是否从 CnC 模板导入的场景（显示渲染通道）",
         default=False,
+    )
+
+    active_pass: StringProperty(
+        name="当前通道",
+        description="最近应用的渲染通道（批量渲染使用）",
+        default="object",
+        maxlen=32,
+    )
+
+    output_template: StringProperty(
+        name="输出模板",
+        description="批量渲染输出路径模板，支持 <template>/<face>，帧号由 Blender 追加",
+        default="//<template>/<face>/",
+        maxlen=512,
     )
 
 
