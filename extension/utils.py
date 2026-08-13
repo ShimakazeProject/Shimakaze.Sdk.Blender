@@ -65,9 +65,6 @@ CNC_VARIANT_OPTIONS: dict[str, tuple[str, str, str]] = {
     "INF": (" - Infantry", ".INF", "Infantry"),
 }
 
-#: Plane types present in every template scene.
-CNC_PLANE_TYPES = ("ambient", "blue", "grey", "holdout2", "shadow2", "shadow", "holdout")
-
 
 def get_scene_compositor(scene):
     """Return the scene's compositor node tree across Blender versions.

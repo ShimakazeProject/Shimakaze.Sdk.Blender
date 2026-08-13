@@ -4,7 +4,7 @@ schema_version = "1.0.0"
 id = "shimakaze_sdk_blender"
 
 name = "Shimakaze SDK"
-tagline = "Blender SDK scaffold following best practices"
+tagline = "CnC / SHP sprite template import and batch rendering"
 version = "0.1.0"
 
 type = "add-on"

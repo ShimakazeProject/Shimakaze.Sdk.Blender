@@ -1,24 +1,23 @@
 # Shimakaze SDK for Blender
 
-一个遵循 **Blender 4.5 扩展（Extension）最佳实践** 的 SDK 脚手架项目。
-清单声明、目录布局、注册流程、构建与安装方式均基于 Blender 4.2+ 官方 `extension` 体系，
-并已在本机 Blender 4.5 上实测通过（构建、安装、注册、运行、卸载重载）。
+一个基于 Blender 官方 **Extension（扩展）体系**（`blender_manifest.toml`）的 CnC/SHP 模板工具扩展，
+支持 Blender **4.2 – 5.3**，并按运行版本自动选用对应渲染器的模板（4.x → Eevee Next，5.x → Hi Five）。
 
 ## 功能特性
 
-- `blender_manifest.toml` 标准清单：唯一标识、平台、权限、许可证（SPDX）等。
-- 模块化结构：属性、操作符、面板、纯逻辑工具分层清晰。
-- CnC 模板场景导入：SHP 侧边栏面板中以向导形式选择游戏（C&C Remastered /
-  Dune 2000 / Red Alert / Tiberian Dawn / Red Alert 2 / ReWire / Tiberian Sun）
-  与变体（标准 / Effects / 步兵），一键导入对应模板场景；当前选中的物体
-  （不创建副本）会递归链接进新导入的场景，并归入 Z=225° 的 target 空对象。
-- 模板自动下载：当当前 Blender 版本对应的模板缺失时，从
-  `Zawaro/blender-cnc-templates` 的**固定版本 release**（当前 `v1.1.0`）
-  按运行版本下载对应渲染器的 `.zip` 并解出 `.blend`（4.2+ 用 Eevee Next，
-  5.x 用 Hi Five），不会使用 latest。
-- 渲染通道按钮（Object / Buildup / Shadow / Preview / Reset）：对当前 blend
-  文件中名称匹配模板场景的场景批量设置合成器通道开关与平面可见性，适用于
-  任意 blend 文件。
+- **模板自动下载**：当前 Blender 版本对应的模板缺失时，从
+  `Zawaro/blender-cnc-templates` 的**固定版本 release**（当前 `v1.1.0`）下载对应
+  渲染器的 `.zip` 并解出 `.blend`，不会使用 `latest`。
+- **模板场景导入**：SHP 侧边栏面板中按「游戏 + 变体」向导导入模板场景
+  （C&C Remastered / Dune 2000 / Red Alert / Tiberian Dawn / Red Alert 2 /
+  ReWire / Tiberian Sun × 标准 / Effects / 步兵）。当前选中的物体（不复制）会
+  递归链接进新场景，并归入 `Z=225°` 的 target 空对象。
+- **渲染通道按钮**：Object / Buildup / Shadow / Preview / Reset，切换合成器
+  通道开关与平面可见性。
+- **批量渲染**：按方向数逐帧渲染 SHP 动画，每方向旋转 target，输出路径可配
+  置模板，状态栏与进度条显示进度，支持 ESC 取消。
+- **按版本适配**：合成器适配按渲染器分目录（`adaptations/eevee_next/`、
+  `adaptations/hi_five/`），运行时根据版本动态导入。
 - 版本号单一来源：`__init__.py` 直接读取清单中的 `version`。
 - 构建脚本（`build.ps1` / `Makefile`）与 GitHub Actions CI。
 
@@ -26,7 +25,7 @@
 
 | 依赖 | 版本 |
 | --- | --- |
-| Blender | 4.2 – 5.2（按版本自动选用模板：4.2+ → Eevee Next，5.x → Hi Five） |
+| Blender | 4.2 – 5.3（4.x 用 Eevee Next，5.x 用 Hi Five 模板） |
 | Python（仅开发用） | 3.10+ |
 
 ## 安装
@@ -41,6 +40,14 @@
 
 在 **Preferences > Get Extensions > Repositories** 中新增本地仓库，目录指向本仓库根目录。
 Blender 会扫描仓库下的扩展子目录（含清单的 `extension/`），并在磁盘内容变化时热重载。
+
+## 使用
+
+1. 面板顶部会显示当前模板文件名；缺失时出现「下载模板」按钮。
+2. 选中要放入的物体后，选择游戏与变体，点击「导入场景」。
+3. 导入后出现渲染通道按钮：先点一个通道（Object/Buildup/Shadow/Preview/Reset），
+   需要时勾选 Alpha，再点「批量渲染」。
+4. 面数（方向数）必须为 1 或 8 的倍数；勾选「反向」时每方向逆时针旋转。
 
 ## 开发
 
@@ -69,30 +76,15 @@ pip install -r requirements-dev.txt   # ruff / pyright / fake-bpy-module-4.5
 blender --command extension build --source-dir extension --output-dir dist
 ```
 
-### 添加 Python 运行时依赖（Blender 4.3+）
+### 适配新模板版本
 
-若扩展需要第三方 Python 包，在 `pyproject.toml` 中补充 `[project]` 表：
+不同模板版本需要不同的代码适配。新增渲染器时：
 
-```toml
-[project]
-name = "shimakaze-sdk"
-version = "0.1.0"
-dependencies = ["requests>=2.31"]
-```
-
-构建/安装时 Blender 会从 PyPI 解析并打包进扩展的 `site-packages`。
-
-## 清单（blender_manifest.toml）要点
-
-以下规则经 Blender 4.5 实测校验：
-
-- `id` 必须是合法 Python 标识符（**不能含点号**），如 `shimakaze_sdk_blender`。
-- `tagline` 长度不超过 64 字符，且不能以标点结尾。
-- `permissions` 是**字符串表**（非数组），无权限时写 `permissions = {}`；
-  需要时如 `permissions = { files = "Write" }`。
-- `platforms` 需要带架构后缀，如 `windows-x64`、`linux-aarch64`、`macos-arm64` 等。
-- `license`、`copyright`、`maintainer`、`python_version` 均必填。
-- 扩展包的 `__init__.py` 必须位于**清单同目录**（即 `extension/` 根）。
+1. 在 `extension/adaptations/` 下新建与渲染器同名的子包，
+   提供 `get_template_file_name()` 与 `repair_compositor(node_tree)`。
+2. 在 `adaptations/__init__.py` 的 `current_template_renderer()` 中按 Blender
+   版本映射到该渲染器。
+3. 更新 `CNC_TEMPLATE_VERSION`（不要用 `latest`）。
 
 ## 项目结构
 
@@ -102,7 +94,7 @@ dependencies = ["requests>=2.31"]
 │   ├── blender_manifest.toml   # 扩展清单（扩展的“身份证”）
 │   ├── __init__.py             # 入口：版本单一来源 + register/unregister
 │   ├── adaptations/            # 按渲染器分目录的模板适配
-│   │   ├── __init__.py         # 运行时按版本分发（get_template_file_name/repair_compositor）
+│   │   ├── __init__.py         # 运行时按版本分发（get_template_file_name / repair_compositor）
 │   │   ├── _common.py          # 节点插座操作公共工具
 │   │   ├── eevee_next/         # Blender 4.x：模板文件名 + 合成器修复
 │   │   │   ├── __init__.py
@@ -110,8 +102,8 @@ dependencies = ["requests>=2.31"]
 │   │   └── hi_five/            # Blender 5.x：模板文件名 + 合成器修复
 │   │       ├── __init__.py
 │   │       └── compositor.py
-│   ├── properties.py           # PropertyGroup，挂载到 bpy.types.WindowManager
-│   ├── operators.py            # 模板场景导入 + 渲染通道 + 批量渲染
+│   ├── properties.py           # PropertyGroup，挂载到 Scene / WindowManager
+│   ├── operators.py            # 导入、渲染通道、批量渲染、下载模板
 │   ├── ui.py                   # 3D 视图侧边栏 SHP 面板
 │   └── utils.py                # 纯逻辑工具
 ├── build.ps1                   # Windows 构建脚本
