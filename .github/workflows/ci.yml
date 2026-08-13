@@ -32,12 +32,10 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    container:
+      image: blenderkit/headless-blender:blender-4.5
     steps:
       - uses: actions/checkout@v7
-
-      - uses: moguri/setup-blender@v1
-        with:
-          blender-version: '4.5'
 
       - name: Build extension
         run: |
