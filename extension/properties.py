@@ -9,6 +9,19 @@ from . import utils
 __all__ = ("register", "unregister")
 
 
+def _update_use_alpha(self, context) -> None:
+    """Sync the compositor's Alpha switch with the checkbox."""
+    scene = context.scene
+    if scene is None:
+        return
+    node_tree = scene.node_tree
+    if node_tree is None:
+        return
+    alpha = node_tree.nodes.get("Alpha")
+    if alpha is not None:
+        alpha.check = self.use_alpha
+
+
 class ShimakazeSceneSettings(PropertyGroup):
     """Per-scene SHP settings, including the scene's own target."""
 
@@ -43,6 +56,13 @@ class ShimakazeSceneSettings(PropertyGroup):
         description="最近应用的渲染通道（批量渲染使用）",
         default="object",
         maxlen=32,
+    )
+
+    use_alpha: BoolProperty(
+        name="Alpha",
+        description="勾选后启用合成器中的 Alpha 开关",
+        default=False,
+        update=_update_use_alpha,
     )
 
     output_template: StringProperty(

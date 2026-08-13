@@ -244,6 +244,10 @@ def apply_shp_pass_to_scene(scene, pass_name: str) -> bool:
         if node is not None and node.name in _PASS_SWITCH_NAMES:
             node.check = node.name in config["switches"]
 
+    alpha = node_tree.nodes.get("Alpha")
+    if alpha is not None:
+        alpha.check = scene.shimakaze_sdk.use_alpha
+
     for obj in bpy.data.objects:
         if obj.name not in scene.objects or not obj.name.startswith("Plane."):
             continue

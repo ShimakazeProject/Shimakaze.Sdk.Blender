@@ -43,6 +43,7 @@ class Shimakaze_PT_scene(Panel):
         row.operator("shimakaze.shp_preview")
         row.operator("shimakaze.shp_reset")
 
+        layout.prop(scene_settings, "use_alpha")
         layout.label(text=f"当前通道：{scene_settings.active_pass.capitalize()}")
         layout.prop(scene_settings, "output_template")
         layout.operator("shimakaze.render_batch")
