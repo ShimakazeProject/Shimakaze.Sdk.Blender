@@ -9,13 +9,10 @@ version = "0.1.0"
 
 type = "add-on"
 
-# Blender 4.5 ships with Python 3.11. Keep in sync with the Blender version.
-blender_version_min = "4.5.0"
-python_version = "3.11"
-
-# Optionally cap the highest Blender version this add-on has been tested against.
-# Leaving it unset keeps the add-on enabled on future releases.
-# blender_version_max = "4.6.0"
+# Blender 4.2 ships Python 3.10; keep in sync with the oldest supported Blender.
+blender_version_min = "4.2.0"
+blender_version_max = "5.3.0"
+python_version = "3.10"
 
 maintainer = "frg2089 <frg2089@outlook.com>"
 

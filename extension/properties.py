@@ -14,11 +14,11 @@ def _update_use_alpha(self, context) -> None:
     scene = context.scene
     if scene is None:
         return
-    node_tree = scene.node_tree
+    node_tree = utils.get_scene_compositor(scene)
     if node_tree is not None:
         alpha = node_tree.nodes.get("Alpha")
         if alpha is not None:
-            alpha.check = self.use_alpha
+            utils.set_switch(alpha, self.use_alpha)
     scene.render.image_settings.color_mode = "RGBA" if self.use_alpha else "RGB"
 
 

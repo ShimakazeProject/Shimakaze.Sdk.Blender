@@ -73,8 +73,10 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         new_scene.shimakaze_sdk.is_imported = True
         context.window.scene = new_scene
 
-        if new_scene.node_tree is not None:
-            utils.repair_alpha_over(new_scene.node_tree)
+        if utils.current_template_renderer() in ("eevee_next", "hi_five"):
+            compositor = utils.get_scene_compositor(new_scene)
+            if compositor is not None:
+                utils.repair_compositor(compositor)
 
         container = utils.get_scene_container_collection(new_scene)
         objects_to_link = utils.collect_objects_to_link(selected_objects)
