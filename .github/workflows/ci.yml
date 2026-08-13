@@ -14,17 +14,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Create .venv matching pyproject.toml (venvPath=".", venv=".venv") so
+      # pyright resolves the fake-bpy-module stubs for `bpy` imports.
       - name: Install tooling
-        run: pip install ruff pyright
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements-dev.txt
 
       - name: Lint
-        run: ruff check .
+        run: .venv/bin/ruff check .
 
       - name: Format check
-        run: ruff format --check .
+        run: .venv/bin/ruff format --check .
 
       - name: Type check
-        run: pyright
+        run: .venv/bin/pyright
 
   build:
     runs-on: ubuntu-latest
@@ -39,7 +43,9 @@ jobs:
           tar -xf blender.tar.xz -C blender --strip-components=1
 
       - name: Build extension
-        run: ./blender/blender --command extension build --source-dir extension --output-dir dist
+        run: |
+          mkdir -p dist
+          ./blender/blender --command extension build --source-dir extension --output-dir dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
