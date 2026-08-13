@@ -114,18 +114,6 @@ def is_valid_direction_count(value: int) -> bool:
     return value == 1 or value % 8 == 0
 
 
-def make_unique_target_name() -> str:
-    """Return a globally unique name for a fresh target empty."""
-    from uuid import uuid4
-
-    import bpy
-
-    while True:
-        candidate = f"target_{uuid4().hex[:8]}"
-        if candidate not in bpy.data.objects:
-            return candidate
-
-
 def get_scene_container_collection(scene) -> Collection:
     """Return the collection named after the scene.
 

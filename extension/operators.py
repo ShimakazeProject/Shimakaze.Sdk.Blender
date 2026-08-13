@@ -65,6 +65,7 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
 
         new_scene = bpy.data.scenes[appended]
         new_scene.name = final_scene
+        new_scene.shimakaze_sdk.is_imported = True
         context.window.scene = new_scene
 
         if new_scene.node_tree is not None:
@@ -97,10 +98,10 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         container collection.
         """
         scene_settings = new_scene.shimakaze_sdk
-        target = bpy.data.objects.get(scene_settings.target)
+        target = scene_settings.target
         if target is None or target.type != "EMPTY":
-            target = bpy.data.objects.new(utils.make_unique_target_name(), None)
-            scene_settings.target = target.name
+            target = bpy.data.objects.new(f"{new_scene.name} Target", None)
+            scene_settings.target = target
 
         target.rotation_euler = (0.0, 0.0, radians(225))
         if target.name not in container.objects:

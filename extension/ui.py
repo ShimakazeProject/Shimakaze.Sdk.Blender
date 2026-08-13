@@ -20,18 +20,26 @@ class Shimakaze_PT_scene(Panel):
         scene_settings = context.scene.shimakaze_sdk
         layout = self.layout
 
-        layout.label(text="CnC 模板导入")
-        layout.prop(cnc_settings, "cnc_game")
-        layout.prop(cnc_settings, "cnc_variant")
-        layout.operator("shimakaze.import_cnc_scene")
+        if not scene_settings.is_imported:
+            layout.label(text="CnC 模板导入")
+            layout.prop(cnc_settings, "cnc_game")
+            layout.prop(cnc_settings, "cnc_variant")
+            if not bpy.context.active_object:
+                layout.label(text="请先选择一个对象")
+                return
 
-        layout.separator()
+            layout.operator("shimakaze.import_cnc_scene")
+            return
+
+        layout.prop(scene_settings, "target")
 
         layout.label(text="渲染通道")
-        row = layout.row(align=True)
+        column = layout.column(align=True)
+        row = column.row(align=True)
         row.operator("shimakaze.shp_object")
         row.operator("shimakaze.shp_buildup")
         row.operator("shimakaze.shp_shadow")
+        row = column.row(align=True)
         row.operator("shimakaze.shp_preview")
         row.operator("shimakaze.shp_reset")
 
@@ -39,13 +47,12 @@ class Shimakaze_PT_scene(Panel):
 
         layout.label(text="SHP Settings")
         layout.prop(scene_settings, "faces")
-        layout.prop(scene_settings, "reverse")
-        layout.prop(scene_settings, "target")
-
         if not utils.is_valid_direction_count(scene_settings.faces):
             box = layout.box()
             box.alert = True
             box.label(text="方向数必须是 1 或 8 的倍数", icon="ERROR")
+
+        layout.prop(scene_settings, "reverse")
 
 
 def register() -> None:

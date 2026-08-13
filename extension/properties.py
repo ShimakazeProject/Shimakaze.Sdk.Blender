@@ -1,7 +1,7 @@
 """Data model for the SHP workflow, stored on the scene and window manager."""
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty
 from bpy.types import PropertyGroup
 
 from . import utils
@@ -26,10 +26,16 @@ class ShimakazeSceneSettings(PropertyGroup):
         default=False,
     )
 
-    target: StringProperty(
+    target: PointerProperty(
         name="目标",
         description="本场景的目标空对象名称",
-        default="",
+        type=bpy.types.Object,
+    )
+
+    is_imported: BoolProperty(
+        name="模板导入",
+        description="是否从 CnC 模板导入的场景（显示渲染通道）",
+        default=False,
     )
 
 
