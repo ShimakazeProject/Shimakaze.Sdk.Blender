@@ -162,6 +162,19 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
     bl_idname = "shimakaze.render_batch"
     bl_label = "批量渲染"
     bl_description = "按方向数批量渲染 SHP 动画帧：每方向渲染动画并旋转目标"
+    bl_options = {"REGISTER"}
+
+    _target = None
+    _faces = 0
+    _frame_start = 0
+    _frame_end = 0
+    _step = 0.0
+    _pass_name = ""
+    _template = ""
+    _face = 0
+    _frame = 0
+    _timer = None
+    _progress_started = False
 
     def execute(self, context) -> set[OperatorReturnItems]:
         scene = context.scene
@@ -188,26 +201,82 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
             self.report({"ERROR"}, "当前场景不是有效的模板场景")
             return {"CANCELLED"}
 
-        output_template = settings.output_template or "//<template>/<face>/"
         step = radians(360 / faces)
-        if settings.reverse:
-            step = -step
+        self._target = target
+        self._faces = faces
+        self._frame_start = scene.frame_start
+        self._frame_end = scene.frame_end
+        self._pass_name = pass_name
+        self._template = settings.output_template or "//<template>/<face>/"
+        self._step = -step if settings.reverse else step
+        self._face = 0
+        self._frame = scene.frame_start
+        self._timer = None
 
         scene.render.use_file_extension = True
-        for face in range(faces):
-            filepath = output_template.replace("<template>", pass_name).replace("<face>", str(face))
-            if "<frame>" in filepath:
-                filepath = filepath.replace("<frame>", "####")
-            if not filepath.endswith(("/", "\\")):
-                filepath += "/"
-            scene.render.filepath = filepath
-            bpy.ops.render.render(animation=True)
-            target.rotation_euler[2] += step
 
-        target.rotation_euler[2] = radians(225)
+        window = context.window
+        if window is None:
+            self._finish(context)
+            return {"FINISHED"}
+        wm = context.window_manager
+        self._timer = wm.event_timer_add(0.01, window=window)
+        wm.modal_handler_add(self)
+        frames_per_face = max(1, self._frame_end - self._frame_start + 1)
+        wm.progress_begin(0, self._faces * frames_per_face)
+        self._progress_started = True
+        return {"RUNNING_MODAL"}
 
-        self.report({"INFO"}, f"批量渲染完成：{pass_name} × {faces} 方向")
-        return {"FINISHED"}
+    def modal(self, context, event) -> set[OperatorReturnItems]:
+        if event.type == "ESC":
+            self._finish(context, cancelled=True)
+            return {"CANCELLED"}
+        if event.type != "TIMER":
+            return {"RUNNING_MODAL"}
+
+        if self._frame > self._frame_end:
+            self._target.rotation_euler[2] += self._step
+            self._face += 1
+            self._frame = self._frame_start
+            if self._face >= self._faces:
+                self._finish(context)
+                return {"FINISHED"}
+
+        scene = context.scene
+        scene.frame_set(self._frame)
+        scene.render.filepath = self._frame_path()
+        bpy.ops.render.render(write_still=True)
+
+        frames_per_face = max(1, self._frame_end - self._frame_start + 1)
+        done = self._face * frames_per_face + (self._frame - self._frame_start) + 1
+        context.window_manager.progress_update(min(done, self._faces * frames_per_face))
+        self._frame += 1
+        return {"RUNNING_MODAL"}
+
+    def _frame_path(self) -> str:
+        """Build the per-frame output path from the output template."""
+        path = self._template.replace("<template>", self._pass_name)
+        path = path.replace("<face>", str(self._face))
+        if "<frame>" in path:
+            path = path.replace("<frame>", f"{self._frame:04d}")
+        else:
+            path += f"{self._frame:04d}"
+        return path
+
+    def _finish(self, context, cancelled: bool = False) -> None:
+        wm = context.window_manager
+        if self._timer is not None:
+            wm.event_timer_remove(self._timer)
+            self._timer = None
+        if self._progress_started:
+            wm.progress_end()
+            self._progress_started = False
+        if self._target is not None:
+            self._target.rotation_euler[2] = radians(225)
+        if cancelled:
+            self.report({"WARNING"}, "批量渲染已取消")
+        else:
+            self.report({"INFO"}, f"批量渲染完成：{self._pass_name} × {self._faces} 方向")
 
 
 _CLASSES = (
