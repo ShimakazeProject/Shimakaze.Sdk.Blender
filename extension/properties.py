@@ -10,16 +10,16 @@ __all__ = ("register", "unregister")
 
 
 def _update_use_alpha(self, context) -> None:
-    """Sync the compositor's Alpha switch with the checkbox."""
+    """Sync the compositor's Alpha switch and output color mode."""
     scene = context.scene
     if scene is None:
         return
     node_tree = scene.node_tree
-    if node_tree is None:
-        return
-    alpha = node_tree.nodes.get("Alpha")
-    if alpha is not None:
-        alpha.check = self.use_alpha
+    if node_tree is not None:
+        alpha = node_tree.nodes.get("Alpha")
+        if alpha is not None:
+            alpha.check = self.use_alpha
+    scene.render.image_settings.color_mode = "RGBA" if self.use_alpha else "RGB"
 
 
 class ShimakazeSceneSettings(PropertyGroup):

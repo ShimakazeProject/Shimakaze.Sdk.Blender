@@ -248,6 +248,8 @@ def apply_shp_pass_to_scene(scene, pass_name: str) -> bool:
     if alpha is not None:
         alpha.check = scene.shimakaze_sdk.use_alpha
 
+    scene.render.image_settings.color_mode = "RGBA" if scene.shimakaze_sdk.use_alpha else "RGB"
+
     for obj in bpy.data.objects:
         if obj.name not in scene.objects or not obj.name.startswith("Plane."):
             continue

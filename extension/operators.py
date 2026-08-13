@@ -249,9 +249,22 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
 
         frames_per_face = max(1, self._frame_end - self._frame_start + 1)
         done = self._face * frames_per_face + (self._frame - self._frame_start) + 1
-        context.window_manager.progress_update(min(done, self._faces * frames_per_face))
+        total = self._faces * frames_per_face
+        context.window_manager.progress_update(min(done, total))
+        self._set_status_text(context, done, total)
         self._frame += 1
         return {"RUNNING_MODAL"}
+
+    def _set_status_text(self, context, done: int, total: int) -> None:
+        """Show the batch progress in the status bar."""
+        workspace = context.workspace
+        if workspace is None:
+            return
+        pct = round(done / total * 100) if total else 100
+        workspace.status_text_set(
+            f"批量渲染 {self._pass_name}：方向 {self._face + 1}/{self._faces}，"
+            f"帧 {self._frame}/{self._frame_end}（{pct}%）"
+        )
 
     def _frame_path(self) -> str:
         """Build the per-frame output path from the output template."""
@@ -271,6 +284,9 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
         if self._progress_started:
             wm.progress_end()
             self._progress_started = False
+        workspace = context.workspace
+        if workspace is not None:
+            workspace.status_text_set(None)
         if self._target is not None:
             self._target.rotation_euler[2] = radians(225)
         if cancelled:
