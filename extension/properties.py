@@ -1,7 +1,14 @@
 """Data model for the SHP workflow, stored on the scene and window manager."""
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import (
+    BoolProperty,
+    CollectionProperty,
+    EnumProperty,
+    IntProperty,
+    PointerProperty,
+    StringProperty,
+)
 from bpy.types import PropertyGroup
 
 from . import i18n, utils
@@ -24,6 +31,12 @@ def _update_use_alpha(self, context) -> None:
         if alpha is not None:
             utils.set_switch(alpha, self.use_alpha)
     scene.render.image_settings.color_mode = "RGBA" if self.use_alpha else "RGB"
+
+
+class MaterialExclusion(PropertyGroup):
+    """A material name kept out of the holdout batch."""
+
+    name: StringProperty(name="Material", description="Material name to exclude")
 
 
 class ShimakazeSceneSettings(PropertyGroup):
@@ -78,6 +91,15 @@ class ShimakazeSceneSettings(PropertyGroup):
         maxlen=512,
     )
 
+    excluded_materials: CollectionProperty(type=MaterialExclusion)
+
+    active_excluded_index: IntProperty(
+        name="Active Excluded Material",
+        description="Index of the selected material in the exclusion list",
+        default=0,
+        min=0,
+    )
+
 
 class ShimakazeWindowSettings(PropertyGroup):
     """Global (window-level) settings that must survive scene switches."""
@@ -107,6 +129,7 @@ class ShimakazeWindowSettings(PropertyGroup):
 
 
 def register() -> None:
+    bpy.utils.register_class(MaterialExclusion)
     bpy.utils.register_class(ShimakazeSceneSettings)
     bpy.utils.register_class(ShimakazeWindowSettings)
     bpy.types.Scene.shimakaze_sdk = PointerProperty(type=ShimakazeSceneSettings)
@@ -118,3 +141,4 @@ def unregister() -> None:
     del bpy.types.WindowManager.shimakaze_cnc
     bpy.utils.unregister_class(ShimakazeSceneSettings)
     bpy.utils.unregister_class(ShimakazeWindowSettings)
+    bpy.utils.unregister_class(MaterialExclusion)

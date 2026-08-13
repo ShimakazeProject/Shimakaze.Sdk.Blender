@@ -1,11 +1,33 @@
-"""User interface panel for the CnC template scene import (SHP group)."""
+"""User interface panels for the CnC template scene import (SHP group)."""
 
 import bpy
-from bpy.types import Panel
+from bpy.types import Panel, UIList
 
 from . import i18n, utils
 
 __all__ = ("register", "unregister")
+
+
+class Shimakaze_UL_materials(UIList):
+    bl_idname = "SHIMAKAZE_UL_materials"
+
+    def draw_item(
+        self,
+        context,
+        layout,
+        data,
+        item,
+        icon,
+        active_data,
+        active_property,
+        index,
+        flt_flag,
+    ) -> None:
+        if self.layout_type in {"DEFAULT", "COMPACT"}:
+            layout.prop(item, "name", text="", emboss=False)
+        elif self.layout_type in {"GRID"}:
+            layout.alignment = "CENTER"
+            layout.label(text=item.name)
 
 
 class Shimakaze_PT_scene(Panel):
@@ -74,9 +96,50 @@ class Shimakaze_PT_scene(Panel):
         layout.prop(scene_settings, "reverse", text=t("Reverse"))
 
 
+class Shimakaze_PT_materials(Panel):
+    bl_idname = "SHIMAKAZE_PT_materials"
+    bl_label = "Holdout Materials"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "SHP"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        scene_settings = context.scene.shimakaze_sdk
+        i18n.set_language(context.window_manager.shimakaze_cnc.language)
+        t = i18n.t
+        layout = self.layout
+
+        layout.label(text=t("Excluded Materials"))
+        row = layout.row(align=True)
+        row.template_list(
+            "SHIMAKAZE_UL_materials",
+            "",
+            scene_settings,
+            "excluded_materials",
+            scene_settings,
+            "active_excluded_index",
+        )
+        col = row.column(align=True)
+        col.operator("shimakaze.add_excluded_material", text="", icon="ADD")
+        col.operator("shimakaze.remove_excluded_material", text="", icon="REMOVE")
+
+        box = layout.box()
+        box.alert = True
+        box.label(
+            text=t("Apply Holdout can only be reverted via Undo (Ctrl+Z) - no separate undo."),
+            icon="ERROR",
+        )
+        layout.operator("shimakaze.apply_holdout", text=t("Apply Holdout"))
+
+
 def register() -> None:
+    bpy.utils.register_class(Shimakaze_UL_materials)
     bpy.utils.register_class(Shimakaze_PT_scene)
+    bpy.utils.register_class(Shimakaze_PT_materials)
 
 
 def unregister() -> None:
+    bpy.utils.unregister_class(Shimakaze_PT_materials)
     bpy.utils.unregister_class(Shimakaze_PT_scene)
+    bpy.utils.unregister_class(Shimakaze_UL_materials)

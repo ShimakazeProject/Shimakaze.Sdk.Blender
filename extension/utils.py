@@ -363,3 +363,27 @@ def set_switch(node, value: bool) -> None:
         switch_input = node.inputs.get("Switch")
         if switch_input is not None:
             switch_input.default_value = value
+
+
+def apply_holdout_shader(material) -> None:
+    """Set a material's surface to a Holdout shader (blocks the object)."""
+    if not material.use_nodes:
+        material.use_nodes = True
+    node_tree = material.node_tree
+    if node_tree is None:
+        return
+    output = next(
+        (n for n in node_tree.nodes.values() if n is not None and n.type == "OUTPUT_MATERIAL"),
+        None,
+    )
+    if output is None:
+        output = node_tree.nodes.new("ShaderNodeOutputMaterial")
+    holdout = next(
+        (n for n in node_tree.nodes.values() if n is not None and n.type == "HOLDOUT"),
+        None,
+    )
+    if holdout is None:
+        holdout = node_tree.nodes.new("ShaderNodeHoldout")
+    for link in list(output.inputs["Surface"].links):
+        node_tree.links.remove(link)
+    node_tree.links.new(holdout.outputs["Holdout"], output.inputs["Surface"])

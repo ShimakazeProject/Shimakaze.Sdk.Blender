@@ -423,6 +423,64 @@ class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
         return {"FINISHED"}
 
 
+class Shimakaze_OT_add_excluded_material(ShimakazeSDKBaseOperator):
+    bl_idname = "shimakaze.add_excluded_material"
+    bl_label = "Add Excluded Material"
+    bl_description = "Add the active object's active material to the exclusion list"
+
+    def execute(self, context) -> set[OperatorReturnItems]:
+        material = getattr(context.object, "active_material", None)
+        if material is None:
+            self.report({"ERROR"}, i18n.t("No active material to add"))
+            return {"CANCELLED"}
+        settings = context.scene.shimakaze_sdk
+        if any(item.name == material.name for item in settings.excluded_materials.values()):
+            self.report({"INFO"}, i18n.t("Material already in the list"))
+            return {"CANCELLED"}
+        item = settings.excluded_materials.add()
+        item.name = material.name
+        settings.active_excluded_index = len(settings.excluded_materials) - 1
+        self.report({"INFO"}, i18n.t("Added material: {name}").format(name=material.name))
+        return {"FINISHED"}
+
+
+class Shimakaze_OT_remove_excluded_material(ShimakazeSDKBaseOperator):
+    bl_idname = "shimakaze.remove_excluded_material"
+    bl_label = "Remove Excluded Material"
+    bl_description = "Remove the selected material from the exclusion list"
+
+    def execute(self, context) -> set[OperatorReturnItems]:
+        settings = context.scene.shimakaze_sdk
+        index = settings.active_excluded_index
+        if index < 0 or index >= len(settings.excluded_materials):
+            self.report({"ERROR"}, i18n.t("No material selected to remove"))
+            return {"CANCELLED"}
+        settings.excluded_materials.remove(index)
+        settings.active_excluded_index = min(index, len(settings.excluded_materials) - 1)
+        return {"FINISHED"}
+
+
+class Shimakaze_OT_apply_holdout(ShimakazeSDKBaseOperator):
+    bl_idname = "shimakaze.apply_holdout"
+    bl_label = "Apply Holdout"
+    bl_description = "Set a Holdout shader on every material not in the exclusion list"
+
+    def execute(self, context) -> set[OperatorReturnItems]:
+        settings = context.scene.shimakaze_sdk
+        excluded = {item.name for item in settings.excluded_materials.values()}
+        count = 0
+        for material in bpy.data.materials.values():
+            if material is None or material.name in excluded:
+                continue
+            utils.apply_holdout_shader(material)
+            count += 1
+        self.report(
+            {"INFO"},
+            i18n.t("Applied holdout to {count} materials").format(count=count),
+        )
+        return {"FINISHED"}
+
+
 _CLASSES = (
     Shimakaze_OT_import_cnc_scene,
     Shimakaze_OT_download_template,
@@ -432,6 +490,9 @@ _CLASSES = (
     Shimakaze_OT_shp_preview,
     Shimakaze_OT_shp_reset,
     Shimakaze_OT_render_batch,
+    Shimakaze_OT_add_excluded_material,
+    Shimakaze_OT_remove_excluded_material,
+    Shimakaze_OT_apply_holdout,
 )
 
 

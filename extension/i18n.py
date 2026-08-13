@@ -28,6 +28,17 @@ _ZH: dict[str, str] = {
     "Download Template": "下载模板",
     "Batch Render": "批量渲染",
     "Language": "语言",
+    "Holdout Materials": "阻隔材质",
+    "Excluded Materials": "排除的材质",
+    "Apply Holdout": "应用阻隔着色器",
+    "Applied holdout to {count} materials": "已为 {count} 个材质应用阻隔着色器",
+    "Apply Holdout can only be reverted via Undo (Ctrl+Z) - no separate undo.": (
+        "应用阻隔着色器只能通过撤销（Ctrl+Z）恢复，没有单独的撤销功能。"
+    ),
+    "No active material to add": "没有可添加的活动材质",
+    "Material already in the list": "材质已在列表中",
+    "Added material: {name}": "已添加材质：{name}",
+    "No material selected to remove": "未选择要移除的材质",
     # Properties
     "Faces (directions)": "面数（方向数）",
     "SHP direction count; must be 1 or a multiple of 8": "SHP 方向数，必须是 1 或 8 的倍数",
