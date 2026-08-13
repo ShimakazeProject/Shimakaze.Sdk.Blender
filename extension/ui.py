@@ -22,17 +22,18 @@ class Shimakaze_PT_scene(Panel):
 
         layout.label(text="CnC 模板导入")
         layout.prop(cnc_settings, "cnc_game")
-        if utils.is_infantry_game(cnc_settings.cnc_game):
-            layout.prop(cnc_settings, "infantry")
+        layout.prop(cnc_settings, "cnc_variant")
         layout.operator("shimakaze.import_cnc_scene")
 
         layout.separator()
 
         layout.label(text="渲染通道")
-        layout.operator("shimakaze.shp_buildup")
-        layout.operator("shimakaze.shp_object")
-        layout.operator("shimakaze.shp_reset")
-        layout.operator("shimakaze.shp_shadow")
+        row = layout.row(align=True)
+        row.operator("shimakaze.shp_object")
+        row.operator("shimakaze.shp_buildup")
+        row.operator("shimakaze.shp_shadow")
+        row.operator("shimakaze.shp_preview")
+        row.operator("shimakaze.shp_reset")
 
         layout.separator()
 

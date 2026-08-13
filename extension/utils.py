@@ -1,4 +1,4 @@
-"""Pure, testable helpers for the CnC template scene import.
+"""Helpers for the CnC (SHP) template import and render passes.
 
 Everything in this module must be importable and testable without Blender,
 so keep Blender imports inside the functions that need them.
@@ -11,24 +11,54 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
-    from bpy.types import Object
+    from bpy.types import Collection, CompositorNodeTree, Object
 
 #: CnC games selectable in the wizard, keyed by enum identifier.
 CNC_GAME_OPTIONS: dict[str, str] = {
+    "RM": "C&C Remastered",
+    "D2K": "Dune 2000",
     "RA": "Red Alert",
     "TD": "Tiberian Dawn",
     "RA2": "Red Alert 2",
+    "RW": "ReWire",
     "TS": "Tiberian Sun",
 }
 
-#: Games that have a dedicated infantry template scene.
-_INFANTRY_GAMES = ("RA2", "TS")
+#: Template game (scene name + plane code) each dropdown entry resolves to.
+#: RA and TD share the combined "Red Alert / Tiberian Dawn" template scenes.
+CNC_TEMPLATE_GAME: dict[str, tuple[str, str]] = {
+    "RM": ("C&C Remastered", "RM"),
+    "D2K": ("Dune 2000", "D2K"),
+    "RA": ("Red Alert / Tiberian Dawn", "RA1"),
+    "TD": ("Red Alert / Tiberian Dawn", "RA1"),
+    "RA2": ("Red Alert 2", "RA2"),
+    "RW": ("ReWire", "RW"),
+    "TS": ("Tiberian Sun", "TS"),
+}
 
-#: Template scene shared by the RA and TD options (the combined scene).
-_COMBINED_TEMPLATE_SCENE = "Red Alert / Tiberian Dawn"
+#: Scene variants, keyed by enum identifier -> (scene suffix, object suffix, label).
+CNC_VARIANT_OPTIONS: dict[str, tuple[str, str, str]] = {
+    "BASE": ("", "", "Default"),
+    "FX": (" - Effects", ".FX", "Effects"),
+    "INF": (" - Infantry", ".INF", "Infantry"),
+}
+
+#: Plane types present in every template scene.
+CNC_PLANE_TYPES = ("ambient", "blue", "grey", "holdout2", "shadow2", "shadow", "holdout")
 
 #: File name of the bundled template that stores the CnC scenes.
-CNC_TEMPLATE_FILE = "CnC_template2_11.blend"
+CNC_TEMPLATE_FILE = "CnC_EeveeNext_1.1.0_build91_20260811.blend"
+
+#: All pass switch nodes in a template compositor (Cycles + Eevee variants).
+_PASS_SWITCH_NAMES = (
+    "Object",
+    "Buildup.Cycles",
+    "Buildup.Eevee",
+    "Shadow.Cycles",
+    "Shadow.Eevee",
+    "Preview.Cycles",
+    "Preview.Eevee",
+)
 
 
 def get_cnc_template_path() -> Path:
@@ -36,7 +66,7 @@ def get_cnc_template_path() -> Path:
     return Path(__file__).resolve().parent / CNC_TEMPLATE_FILE
 
 
-def cnc_game_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:
+def game_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:
     """Build the EnumProperty items for the game selector."""
     return [
         (identifier, label, f"Append the '{label}' template scene")
@@ -44,23 +74,39 @@ def cnc_game_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:
     ]
 
 
-def is_infantry_game(game: str) -> bool:
-    """Return True if the game has a dedicated infantry template scene."""
-    return game in _INFANTRY_GAMES
+def variant_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:
+    """Build the EnumProperty items for the scene-variant selector."""
+    return [
+        (key, label, f"Append the '{label}' variant")
+        for key, (_, _, label) in CNC_VARIANT_OPTIONS.items()
+    ]
 
 
-def resolve_cnc_scene(game: str, infantry: bool) -> tuple[str, str]:
-    """Map a game + infantry flag to the (template scene, final scene name).
+def resolve_cnc_scene(game: str, variant: str) -> tuple[str, str]:
+    """Map a game + variant to the (template scene, final scene name).
 
-    RA and TD share the combined 'Red Alert / Tiberian Dawn' template scene,
-    so the imported scene is renamed to the chosen game. RA2/TS use their own
-    scene, with an optional ' - Infantry' suffix.
+    RA and TD share the combined ``Red Alert / Tiberian Dawn`` template
+    scenes; the imported scene is renamed to the chosen game name.
     """
-    game_name = CNC_GAME_OPTIONS[game]
-    if is_infantry_game(game):
-        scene_name = f"{game_name}{' - Infantry' if infantry else ''}"
-        return scene_name, scene_name
-    return _COMBINED_TEMPLATE_SCENE, game_name
+    template_name, _code = CNC_TEMPLATE_GAME[game]
+    scene_suffix = CNC_VARIANT_OPTIONS[variant][0]
+    return f"{template_name}{scene_suffix}", f"{CNC_GAME_OPTIONS[game]}{scene_suffix}"
+
+
+def template_games() -> list[tuple[str, str]]:
+    """Unique (template scene name, plane code) pairs, in dropdown order.
+
+    RA and TD both resolve to the same template game, so it is only listed
+    once here.
+    """
+    seen: set[tuple[str, str]] = set()
+    result: list[tuple[str, str]] = []
+    for template_name, code in CNC_TEMPLATE_GAME.values():
+        pair = (template_name, code)
+        if pair not in seen:
+            seen.add(pair)
+            result.append(pair)
+    return result
 
 
 def is_valid_direction_count(value: int) -> bool:
@@ -78,6 +124,26 @@ def make_unique_target_name() -> str:
         candidate = f"target_{uuid4().hex[:8]}"
         if candidate not in bpy.data.objects:
             return candidate
+
+
+def get_scene_container_collection(scene) -> Collection:
+    """Return the collection named after the scene.
+
+    The template ships an empty collection per scene (e.g. ``Red Alert 2 -
+    Infantry``) meant to hold the user's model and the target empty, separate
+    from the ``* Template`` collection. When the scene was renamed (e.g. a
+    combined template split into ``Red Alert`` / ``Tiberian Dawn``) and no
+    matching collection exists yet, one is created under the scene's root
+    collection.
+    """
+    import bpy
+
+    collection = bpy.data.collections.get(scene.name)
+    if collection is not None:
+        return collection
+    collection = bpy.data.collections.new(scene.name)
+    scene.collection.children.link(collection)
+    return collection
 
 
 def collect_objects_to_link(objects: Iterable[Object]) -> set[Object]:
@@ -116,164 +182,157 @@ def collect_objects_to_link(objects: Iterable[Object]) -> set[Object]:
     return result
 
 
-#: Template scenes and the data-block names they use, keyed by original
-#: template scene name (as stored in CnC_template2_11.blend).
-CNC_SCENES: dict[str, dict[str, str]] = {
-    "Tiberian Sun": {
-        "material": "Plane.blue.material.TS",
-        "blue": "Plane.blue.TS",
-        "grey": "Plane.grey.TS",
-    },
-    "Tiberian Sun - Infantry": {
-        "material": "Plane.blue.material.TS.INF",
-        "blue": "Plane.blue.TS.INF",
-        "grey": "Plane.grey.TS.INF",
-    },
-    "Red Alert 2": {
-        "material": "Plane.blue.material.RA2",
-        "blue": "Plane.blue.RA2",
-        "grey": "Plane.grey.RA2",
-    },
-    "Red Alert 2 - Infantry": {
-        "material": "Plane.blue.material.RA2.INF",
-        "blue": "Plane.blue.RA2.INF",
-        "grey": "Plane.grey.RA2.INF",
-    },
-    "Red Alert / Tiberian Dawn": {
-        "material": "Plane.blue.material.RA1",
-        "blue": "Plane.blue.RA1",
-        "grey": "Plane.grey.RA1",
-        "grass": "Plane.grass.RA1",
-    },
-}
-
-
 class ShpPassConfig(TypedDict):
-    switch: bool
-    pass_index: int
-    transparent: bool
-    gtao: bool
-    plane_hide: dict[str, bool]
+    switches: tuple[str, ...]
+    planes: dict[str, bool]
 
 
-#: Render-pass setups matching the bundled tmp scripts. These only ever apply
-#: to the *template* scenes (original names), never to imported scenes.
+#: Render-pass setups matching the template's compositor switch chain.
 SHP_PASSES: dict[str, ShpPassConfig] = {
-    "buildup": {
-        "switch": True,
-        "pass_index": 0,
-        "transparent": True,
-        "gtao": True,
-        "plane_hide": {"blue": False, "grey": True, "grass": True},
-    },
     "object": {
-        "switch": True,
-        "pass_index": 0,
-        "transparent": False,
-        "gtao": True,
-        "plane_hide": {"blue": True, "grey": True, "grass": True},
+        "switches": ("Object",),
+        "planes": {
+            "ambient": True,
+            "blue": True,
+            "grey": True,
+            "holdout2": True,
+            "shadow2": True,
+            "shadow": True,
+            "holdout": True,
+        },
     },
-    "reset": {
-        "switch": True,
-        "pass_index": 0,
-        "transparent": False,
-        "gtao": True,
-        "plane_hide": {"blue": True, "grey": False, "grass": True},
+    "buildup": {
+        "switches": ("Buildup.Cycles", "Buildup.Eevee"),
+        "planes": {
+            "ambient": True,
+            "blue": False,
+            "grey": True,
+            "holdout2": True,
+            "shadow2": True,
+            "shadow": True,
+            "holdout": True,
+        },
     },
     "shadow": {
-        "switch": False,
-        "pass_index": 1,
-        "transparent": False,
-        "gtao": False,
-        "plane_hide": {"blue": False, "grey": True, "grass": True},
+        "switches": ("Shadow.Cycles", "Shadow.Eevee"),
+        "planes": {
+            "ambient": True,
+            "blue": True,
+            "grey": True,
+            "holdout2": True,
+            "shadow2": False,
+            "shadow": False,
+            "holdout": True,
+        },
+    },
+    "preview": {
+        "switches": ("Preview.Cycles", "Preview.Eevee"),
+        "planes": {
+            "ambient": True,
+            "blue": True,
+            "grey": False,
+            "holdout2": True,
+            "shadow2": True,
+            "shadow": True,
+            "holdout": True,
+        },
+    },
+    "reset": {
+        "switches": (),
+        "planes": {
+            "ambient": True,
+            "blue": True,
+            "grey": False,
+            "holdout2": True,
+            "shadow2": True,
+            "shadow": True,
+            "holdout": True,
+        },
     },
 }
 
 
-def apply_shp_pass(pass_name: str) -> tuple[list[str], int]:
-    """Apply a render-pass setup to scenes named as in the CnC template.
+def apply_shp_pass(pass_name: str) -> list[str]:
+    """Apply a render-pass setup to every CnC scene in the open blend.
 
-    Works on any open blend: every scene that matches a template scene name
-    (e.g. ``Red Alert 2``, ``Tiberian Sun``) gets the pass settings applied.
-    Returns the scenes that matched and how many objects were tagged.
+    Toggles the pass switch chain and the per-scene plane visibility for all
+    template scenes that exist in the current file. Returns the scene names
+    that were touched.
     """
     import bpy
 
     config = SHP_PASSES[pass_name]
     touched: list[str] = []
-    object_count = 0
 
-    for scene_name, names in CNC_SCENES.items():
-        scene = bpy.data.scenes.get(scene_name)
-        if scene is None:
-            continue
-
-        node_tree = scene.node_tree
-        switch = node_tree.nodes.get("Switch") if node_tree is not None else None
-        if switch is not None:
-            switch.check = config["switch"]
-
-        for plane_key, hide in config["plane_hide"].items():
-            plane_name = names.get(plane_key)
-            if plane_name is None:
+    for template_name, code in template_games():
+        for _variant, (scene_suffix, object_suffix, _label) in CNC_VARIANT_OPTIONS.items():
+            scene = bpy.data.scenes.get(f"{template_name}{scene_suffix}")
+            if scene is None:
                 continue
-            plane = bpy.data.objects.get(plane_name)
-            if plane is not None:
-                plane.hide_render = hide
 
-        material = bpy.data.materials.get(names["material"])
-        if material is not None:
-            material.blend_method = "BLEND" if config["transparent"] else "OPAQUE"
+            node_tree: CompositorNodeTree | None = scene.node_tree
+            if node_tree is not None:
+                repair_alpha_over(node_tree)
+                for node in node_tree.nodes.values():
+                    if node is not None and node.name in _PASS_SWITCH_NAMES:
+                        node.check = node.name in config["switches"]
 
-        scene.eevee.use_gtao = config["gtao"]
+            for plane_type, hide in config["planes"].items():
+                plane = bpy.data.objects.get(f"Plane.{plane_type}.{code}{object_suffix}")
+                if plane is not None:
+                    plane.hide_render = hide
 
-        for obj in bpy.data.objects:
-            if obj.name not in scene.objects:
-                continue
-            obj.pass_index = config["pass_index"]
-            object_count += 1
+            touched.append(scene.name)
 
-        if pass_name == "shadow":
-            _repair_shadow_compositor(scene)
-
-        touched.append(scene_name)
-
-    return touched, object_count
+    return touched
 
 
-def _repair_shadow_compositor(scene) -> None:
-    """Make the compositor's shadow branch actually detect the shadow.
+def repair_alpha_over(node_tree) -> bool:
+    """Fix the compositor's Alpha Over foreground/background wiring.
 
-    The template's original extraction (Normal node + ID Mask + ColorRamp)
-    no longer works in Blender 4.5: the Normal node normalizes the render,
-    compressing the shadow signal so the ColorRamp threshold never triggers
-    and the frame renders as a flat blue. This rewires the Switch's Off
-    (shadow) input to a blue-channel threshold of the render image, so the
-    shadow (dark blue) maps to black and the plane (bright blue) to blue.
+    The template ships with the Alpha Over sockets swapped: the left node has
+    an empty Image 1, and the right node has Image 1/Image 2 reversed, so the
+    sprite never composites over the correct background. This rewires them at
+    runtime without modifying the template file. Returns True if anything was
+    changed.
     """
-    node_tree = scene.node_tree
-    if node_tree is None:
-        return
-    switch = next((n for n in node_tree.nodes if n.type == "SWITCH"), None)
-    render_layer = next((n for n in node_tree.nodes if n.type == "R_LAYERS"), None)
-    if switch is None or render_layer is None:
-        return
+    alpha_switch = node_tree.nodes.get("Alpha")
+    alpha_over = node_tree.nodes.get("Alpha Over")
+    alpha_over_1 = node_tree.nodes.get("Alpha Over.001")
+    if alpha_switch is None or alpha_over is None or alpha_over_1 is None:
+        return False
 
-    mask = node_tree.nodes.get("SHP.ShadowMask")
-    ramp = node_tree.nodes.get("SHP.ShadowCR")
-    if mask is None or ramp is None:
-        mask = node_tree.nodes.new("CompositorNodeSeparateColor")
-        mask.name = "SHP.ShadowMask"
-        mask.mode = "RGB"
-        ramp = node_tree.nodes.new("CompositorNodeValToRGB")
-        ramp.name = "SHP.ShadowCR"
-        ramp.color_ramp.elements[0].color = (0.0, 0.0, 0.0, 1.0)
-        ramp.color_ramp.elements[0].position = 0.15
-        ramp.color_ramp.elements[1].color = (0.0, 0.0, 1.0, 1.0)
-        ramp.color_ramp.elements[1].position = 0.25
-        node_tree.links.new(render_layer.outputs["Image"], mask.inputs["Image"])
-        node_tree.links.new(mask.outputs["Blue"], ramp.inputs["Fac"])
+    group = node_tree.nodes.get("Group")
+    color_ramp = node_tree.nodes.get("Color Ramp")
+    changed = False
 
-    for link in list(switch.inputs["Off"].links):
-        node_tree.links.remove(link)
-    node_tree.links.new(ramp.outputs[0], switch.inputs["Off"])
+    def set_input(node, index: int, from_socket) -> None:
+        nonlocal changed
+        socket = node.inputs[index]
+        current = next(iter(socket.links), None)
+        if current is not None and current.from_socket is from_socket:
+            return
+        for link in list(socket.links):
+            node_tree.links.remove(link)
+        node_tree.links.new(from_socket, socket)
+        changed = True
+
+    # Left Alpha Over: Image 1 <- Alpha output, Image 2 <- Alpha Convert (Group).
+    set_input(alpha_over, 1, alpha_switch.outputs["Image"])
+    if group is not None:
+        set_input(alpha_over, 2, group.outputs["Image"])
+    else:
+        for link in list(alpha_over.inputs[2].links):
+            node_tree.links.remove(link)
+        changed = True
+
+    # Right Alpha Over.001: Image 1 <- Alpha output, Image 2 <- Color Ramp.
+    set_input(alpha_over_1, 1, alpha_switch.outputs["Image"])
+    if color_ramp is not None:
+        set_input(alpha_over_1, 2, color_ramp.outputs["Color"])
+    else:
+        for link in list(alpha_over_1.inputs[2].links):
+            node_tree.links.remove(link)
+        changed = True
+
+    return changed

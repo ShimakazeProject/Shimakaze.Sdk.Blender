@@ -8,12 +8,13 @@
 
 - `blender_manifest.toml` 标准清单：唯一标识、平台、权限、许可证（SPDX）等。
 - 模块化结构：属性、操作符、面板、纯逻辑工具分层清晰。
-- CnC 模板场景导入：SHP 侧边栏面板中以向导形式选择游戏（Red Alert / Tiberian
-  Dawn / Red Alert 2 / Tiberian Sun），RA2/TS 可选步兵模板，一键导入并命名为
-  `<游戏名>[ - Infantry]`；当前选中的物体（不创建副本）会链接进新导入的场景。
-- 渲染通道按钮（Buildup / Object / Reset / Shadow）：对当前 blend 文件中
-  名称匹配模板场景（如 Red Alert 2、Tiberian Sun）的场景批量设置渲染通道状态，
-  适用于任意 blend 文件。
+- CnC 模板场景导入：SHP 侧边栏面板中以向导形式选择游戏（C&C Remastered /
+  Dune 2000 / Red Alert / Tiberian Dawn / Red Alert 2 / ReWire / Tiberian Sun）
+  与变体（标准 / Effects / 步兵），一键导入对应模板场景；当前选中的物体
+  （不创建副本）会递归链接进新导入的场景，并归入 Z=225° 的 target 空对象。
+- 渲染通道按钮（Object / Buildup / Shadow / Preview / Reset）：对当前 blend
+  文件中名称匹配模板场景的场景批量设置合成器通道开关与平面可见性，适用于
+  任意 blend 文件。
 - 版本号单一来源：`__init__.py` 直接读取清单中的 `version`。
 - 构建脚本（`build.ps1` / `Makefile`）与 GitHub Actions CI。
 

@@ -1,4 +1,4 @@
-"""Operators for importing CnC template scenes."""
+"""Operators for importing CnC template scenes and applying render passes."""
 
 from __future__ import annotations
 
@@ -28,17 +28,18 @@ class ShimakazeSDKBaseOperator(Operator):
 
 class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
     bl_idname = "shimakaze.import_cnc_scene"
-    bl_label = "Import CnC Template Scene"
-    bl_description = "Append the selected scene from the CnC template into the current workspace"
+    bl_label = "Import Scene"
+    bl_description = "Append the selected game + variant scene from the CnC template"
 
     def execute(self, context) -> set[OperatorReturnItems]:
         settings = context.window_manager.shimakaze_cnc
         game = settings.cnc_game
-        if game not in utils.CNC_GAME_OPTIONS:
-            self.report({"ERROR"}, "Unknown CnC game selected")
+        variant = settings.cnc_variant
+        if game not in utils.CNC_GAME_OPTIONS or variant not in utils.CNC_VARIANT_OPTIONS:
+            self.report({"ERROR"}, "Unknown CnC game or variant selected")
             return {"CANCELLED"}
 
-        template_scene, final_scene = utils.resolve_cnc_scene(game, settings.infantry)
+        template_scene, final_scene = utils.resolve_cnc_scene(game, variant)
 
         template_path = utils.get_cnc_template_path()
         if not template_path.is_file():
@@ -66,12 +67,16 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         new_scene.name = final_scene
         context.window.scene = new_scene
 
+        if new_scene.node_tree is not None:
+            utils.repair_alpha_over(new_scene.node_tree)
+
+        container = utils.get_scene_container_collection(new_scene)
         objects_to_link = utils.collect_objects_to_link(selected_objects)
         for obj in objects_to_link:
-            if obj.name not in new_scene.objects:
-                new_scene.collection.objects.link(obj)
+            if obj.name not in container.objects:
+                container.objects.link(obj)
 
-        target = self._ensure_target(new_scene)
+        target = self._ensure_target(new_scene, container)
         for obj in objects_to_link:
             if obj.parent not in objects_to_link:
                 obj.parent = target
@@ -84,11 +89,12 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         return {"FINISHED"}
 
     @staticmethod
-    def _ensure_target(new_scene) -> bpy.types.Object:
+    def _ensure_target(new_scene, container) -> bpy.types.Object:
         """Return this scene's target, reusing the one stored on the scene.
 
         Creates a uniquely named empty when none is recorded yet, keeps its
-        Euler rotation at Z=225 degrees, and links it into the scene.
+        Euler rotation at Z=225 degrees, and links it into the scene's
+        container collection.
         """
         scene_settings = new_scene.shimakaze_sdk
         target = bpy.data.objects.get(scene_settings.target)
@@ -97,22 +103,18 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
             scene_settings.target = target.name
 
         target.rotation_euler = (0.0, 0.0, radians(225))
-        if target.name not in new_scene.objects:
-            new_scene.collection.objects.link(target)
+        if target.name not in container.objects:
+            container.objects.link(target)
         return target
 
 
 class Shimakaze_OT_shp_pass(ShimakazeSDKBaseOperator):
-    """Apply one SHP render pass to CnC scenes in the current file.
-
-    These passes mirror the bundled tmp scripts and operate on any scene in
-    the open blend whose name matches a template scene name.
-    """
+    """Apply one SHP render pass to every CnC scene in the current file."""
 
     pass_name: str = ""
 
     def execute(self, context) -> set[OperatorReturnItems]:
-        touched, object_count = utils.apply_shp_pass(self.pass_name)
+        touched = utils.apply_shp_pass(self.pass_name)
         if not touched:
             self.report(
                 {"ERROR"},
@@ -122,45 +124,53 @@ class Shimakaze_OT_shp_pass(ShimakazeSDKBaseOperator):
             return {"CANCELLED"}
         self.report(
             {"INFO"},
-            f"已应用 {self.bl_label} 到 {len(touched)} 个模板场景（{object_count} 个物体）",
+            f"已应用 {self.bl_label} 到 {len(touched)} 个模板场景",
         )
         return {"FINISHED"}
-
-
-class Shimakaze_OT_shp_buildup(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_buildup"
-    bl_label = "Buildup"
-    bl_description = "建造动画通道：蓝面可见，透明材质，用于渲染建造动画"
-    pass_name = "buildup"
 
 
 class Shimakaze_OT_shp_object(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_object"
     bl_label = "Object"
-    bl_description = "物体通道：隐藏全部平面（模板）"
+    bl_description = "物体通道：渲染物体本体，隐藏全部平面"
     pass_name = "object"
 
 
-class Shimakaze_OT_shp_reset(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_reset"
-    bl_label = "Reset"
-    bl_description = "重置通道：灰面可见（模板）"
-    pass_name = "reset"
+class Shimakaze_OT_shp_buildup(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_buildup"
+    bl_label = "Buildup"
+    bl_description = "建造动画通道：蓝面可见，用于渲染建造动画"
+    pass_name = "buildup"
 
 
 class Shimakaze_OT_shp_shadow(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_shadow"
     bl_label = "Shadow"
-    bl_description = "阴影通道：pass_index=1，关闭 AO（模板）"
+    bl_description = "阴影通道：阴影面可见，用于渲染阴影"
     pass_name = "shadow"
+
+
+class Shimakaze_OT_shp_preview(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_preview"
+    bl_label = "Preview"
+    bl_description = "预览通道：灰面可见"
+    pass_name = "preview"
+
+
+class Shimakaze_OT_shp_reset(Shimakaze_OT_shp_pass):
+    bl_idname = "shimakaze.shp_reset"
+    bl_label = "Reset"
+    bl_description = "重置为默认状态：灰面可见，所有通道开关关闭"
+    pass_name = "reset"
 
 
 _CLASSES = (
     Shimakaze_OT_import_cnc_scene,
-    Shimakaze_OT_shp_buildup,
     Shimakaze_OT_shp_object,
-    Shimakaze_OT_shp_reset,
+    Shimakaze_OT_shp_buildup,
     Shimakaze_OT_shp_shadow,
+    Shimakaze_OT_shp_preview,
+    Shimakaze_OT_shp_reset,
 )
 
 

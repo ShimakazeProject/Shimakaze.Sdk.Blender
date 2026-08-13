@@ -39,13 +39,13 @@ class ShimakazeWindowSettings(PropertyGroup):
     cnc_game: EnumProperty(
         name="游戏",
         description="选择要导入的 CnC 游戏模板",
-        items=utils.cnc_game_enum_items,
+        items=utils.game_enum_items,
     )
 
-    infantry: BoolProperty(
-        name="步兵",
-        description="是否导入步兵模板（仅 RA2 / TS 可用）",
-        default=False,
+    cnc_variant: EnumProperty(
+        name="变体",
+        description="选择模板场景变体（标准 / Effects / 步兵）",
+        items=utils.variant_enum_items,
     )
 
 
