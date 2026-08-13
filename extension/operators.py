@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from math import radians
 from typing import TYPE_CHECKING
 
@@ -41,7 +42,11 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
 
         template_scene, final_scene = utils.resolve_cnc_scene(game, variant)
 
-        template_path = utils.get_cnc_template_path()
+        try:
+            template_path = utils.ensure_template()
+        except Exception as exc:
+            self.report({"ERROR"}, f"无法获取模板文件：{exc}")
+            return {"CANCELLED"}
         if not template_path.is_file():
             self.report({"ERROR"}, f"CnC template file not found: {template_path}")
             return {"CANCELLED"}
@@ -295,8 +300,104 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
             self.report({"INFO"}, f"批量渲染完成：{self._pass_name} × {self._faces} 方向")
 
 
+class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
+    bl_idname = "shimakaze.download_template"
+    bl_label = "下载模板"
+    bl_description = "异步下载缺少的 CnC 模板文件（固定版本）"
+    bl_options = {"REGISTER"}
+
+    _state = None
+    _timer = None
+
+    def execute(self, context) -> set[OperatorReturnItems]:
+        path = utils.get_cnc_template_path()
+        if path.is_file():
+            self.report({"INFO"}, f"模板已就绪：{path.name}")
+            return {"FINISHED"}
+        if self._state is not None:
+            self.report({"INFO"}, "模板已在下载中")
+            return {"CANCELLED"}
+
+        window = context.window
+        if window is None:
+            try:
+                utils.ensure_template()
+            except Exception as exc:
+                self.report({"ERROR"}, f"下载模板失败：{exc}")
+                return {"CANCELLED"}
+            self.report({"INFO"}, "模板已就绪")
+            return {"FINISHED"}
+
+        self._state = {"ok": None, "message": "", "current": 0, "total": 0, "phase": "正在连接…"}
+        self._timer = None
+        thread = threading.Thread(target=self._worker, args=(self._state,), daemon=True)
+        thread.start()
+
+        wm = context.window_manager
+        self._timer = wm.event_timer_add(0.1, window=window)
+        wm.modal_handler_add(self)
+        wm.progress_begin(0, 100)
+        return {"RUNNING_MODAL"}
+
+    @staticmethod
+    def _worker(state) -> None:
+        """Run the blocking download on a worker thread (no bpy access)."""
+
+        def report_hook(blocks: int, block_size: int, total_size: int) -> None:
+            state["current"] = blocks * block_size
+            state["total"] = total_size or state["total"]
+
+        try:
+            utils._download_template(
+                utils.get_cnc_template_path(),
+                report_hook=report_hook,
+                set_phase=lambda text: state.update(phase=text),
+            )
+            state["ok"] = True
+            state["message"] = "下载完成"
+        except Exception as exc:
+            state["ok"] = False
+            state["message"] = str(exc)
+
+    def modal(self, context, event) -> set[OperatorReturnItems]:
+        if event.type != "TIMER":
+            return {"RUNNING_MODAL"}
+        state = self._state
+        if state is None:
+            return {"CANCELLED"}
+
+        if state["ok"] is None:
+            total = state["total"]
+            if total:
+                pct = min(int(state["current"] * 100 / total), 100)
+                context.window_manager.progress_update(pct)
+            workspace = context.workspace
+            if workspace is not None:
+                pct = f" {min(int(state['current'] * 100 / total), 100)}%" if total else ""
+                workspace.status_text_set(f"下载模板 {state['phase']}{pct}")
+            return {"RUNNING_MODAL"}
+
+        wm = context.window_manager
+        if self._timer is not None:
+            wm.event_timer_remove(self._timer)
+            self._timer = None
+        wm.progress_end()
+        workspace = context.workspace
+        if workspace is not None:
+            workspace.status_text_set(None)
+        ok = state["ok"]
+        self._state = None
+        if ok:
+            path = utils.get_cnc_template_path()
+            self.report({"INFO"}, f"模板已就绪：{path.name}")
+        else:
+            self.report({"ERROR"}, f"下载模板失败：{state['message']}")
+        return {"FINISHED"}
+
+
 _CLASSES = (
     Shimakaze_OT_import_cnc_scene,
+    Shimakaze_OT_download_template,
     Shimakaze_OT_shp_object,
     Shimakaze_OT_shp_buildup,
     Shimakaze_OT_shp_shadow,

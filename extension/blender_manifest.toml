@@ -19,8 +19,9 @@ python_version = "3.11"
 
 maintainer = "frg2089 <frg2089@outlook.com>"
 
-# Declare exactly the permissions you need. The SDK scaffold needs none yet.
-permissions = {}
+# Declare exactly the permissions you need. Network + file write are required
+# to download the template release when the bundled .blend is missing.
+permissions = { files = "Write", network = "Internet" }
 
 # Platform values include an architecture, e.g. "windows-x64".
 platforms = ["windows-x64", "windows-arm64", "macos-x64", "macos-arm64", "linux-x64", "linux-aarch64"]

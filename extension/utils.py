@@ -6,12 +6,27 @@ so keep Blender imports inside the functions that need them.
 
 from __future__ import annotations
 
+import json
+import shutil
+import tempfile
+import urllib.request
+import zipfile
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from bpy.types import Collection, CompositorNodeTree, Object
+
+# ---------------------------------------------------------------------------
+# Template release metadata.
+#
+# When the bundled template file is missing, it is downloaded from the pinned
+# release below. Bump CNC_TEMPLATE_VERSION when adapting to a newer template;
+# different versions require different code, so never use "latest".
+CNC_TEMPLATE_REPO = "Zawaro/blender-cnc-templates"
+CNC_TEMPLATE_VERSION = "v1.1.0"
+CNC_TEMPLATE_RENDERER = "eevee_next"
 
 #: CnC games selectable in the wizard, keyed by enum identifier.
 CNC_GAME_OPTIONS: dict[str, str] = {
@@ -64,6 +79,57 @@ _PASS_SWITCH_NAMES = (
 def get_cnc_template_path() -> Path:
     """Return the absolute path of the bundled CnC template blend file."""
     return Path(__file__).resolve().parent / CNC_TEMPLATE_FILE
+
+
+def ensure_template() -> Path:
+    """Return the template .blend, downloading it from the release if missing."""
+    path = get_cnc_template_path()
+    if path.is_file():
+        return path
+    _download_template(path)
+    return path
+
+
+def _download_template(destination: Path, report_hook=None, set_phase=None) -> None:
+    """Download the pinned release .zip and extract the .blend to destination.
+
+    ``report_hook`` receives ``(count, block_size, total_size)`` download
+    progress; ``set_phase`` receives a short status string. Both are optional
+    and must not touch bpy (they run on a worker thread).
+    """
+
+    def phase(text: str) -> None:
+        if set_phase is not None:
+            set_phase(text)
+
+    api = f"https://api.github.com/repos/{CNC_TEMPLATE_REPO}/releases/tags/{CNC_TEMPLATE_VERSION}"
+    phase("正在连接…")
+    with urllib.request.urlopen(api, timeout=30) as response:
+        release = json.load(response)
+
+    assets = [a for a in release.get("assets", []) if a["name"].lower().endswith(".zip")]
+    eevee = [a for a in assets if CNC_TEMPLATE_RENDERER in a["name"].lower()]
+    asset = (eevee or assets or [None])[0]
+    if asset is None:
+        raise RuntimeError(f"release {CNC_TEMPLATE_VERSION} 中没有 .zip 资源")
+    url = asset["browser_download_url"]
+
+    phase("正在下载…")
+    with tempfile.TemporaryDirectory() as tmp:
+        zip_path = Path(tmp) / "template.zip"
+        if report_hook is not None:
+            urllib.request.urlretrieve(url, zip_path, reporthook=report_hook)
+        else:
+            urllib.request.urlretrieve(url, zip_path)
+        phase("正在解压…")
+        with zipfile.ZipFile(zip_path) as archive:
+            blends = [n for n in archive.namelist() if n.lower().endswith(".blend")]
+            if not blends:
+                raise RuntimeError("模板压缩包中没有 .blend 文件")
+            name = blends[0]
+            archive.extract(name, tmp)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(Path(tmp) / name, destination)
 
 
 def game_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:

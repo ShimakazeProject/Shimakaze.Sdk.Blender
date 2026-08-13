@@ -20,6 +20,15 @@ class Shimakaze_PT_scene(Panel):
         scene_settings = context.scene.shimakaze_sdk
         layout = self.layout
 
+        template_path = utils.get_cnc_template_path()
+        if template_path.is_file():
+            layout.label(text=f"模板：{template_path.name}")
+        else:
+            box = layout.box()
+            box.alert = True
+            box.label(text="模板文件不存在", icon="ERROR")
+            box.operator("shimakaze.download_template")
+
         if not scene_settings.is_imported:
             layout.label(text="CnC 模板导入")
             layout.prop(cnc_settings, "cnc_game")

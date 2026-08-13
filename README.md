@@ -12,6 +12,9 @@
   Dune 2000 / Red Alert / Tiberian Dawn / Red Alert 2 / ReWire / Tiberian Sun）
   与变体（标准 / Effects / 步兵），一键导入对应模板场景；当前选中的物体
   （不创建副本）会递归链接进新导入的场景，并归入 Z=225° 的 target 空对象。
+- 模板自动下载：当内置模板 `.blend` 缺失时，从
+  `Zawaro/blender-cnc-templates` 的**固定版本 release**（当前 `v1.1.0`，
+  eevee_next）下载 `.zip` 并解出 `.blend`，不会使用 latest。
 - 渲染通道按钮（Object / Buildup / Shadow / Preview / Reset）：对当前 blend
   文件中名称匹配模板场景的场景批量设置合成器通道开关与平面可见性，适用于
   任意 blend 文件。
