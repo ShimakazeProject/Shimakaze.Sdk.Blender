@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import bpy
 from bpy.types import Operator
 
-from . import utils
+from . import i18n, utils
 
 if TYPE_CHECKING:
     from bpy.stub_internal.rna_enums import OperatorReturnItems
@@ -33,6 +33,7 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
     bl_description = "Append the selected game + variant scene from the CnC template"
 
     def execute(self, context) -> set[OperatorReturnItems]:
+        t = i18n.t
         settings = context.window_manager.shimakaze_cnc
         game = settings.cnc_game
         variant = settings.cnc_variant
@@ -45,7 +46,7 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         try:
             template_path = utils.ensure_template()
         except Exception as exc:
-            self.report({"ERROR"}, f"无法获取模板文件：{exc}")
+            self.report({"ERROR"}, t("Could not get template file: {exc}").format(exc=exc))
             return {"CANCELLED"}
         if not template_path.is_file():
             self.report({"ERROR"}, f"CnC template file not found: {template_path}")
@@ -122,52 +123,55 @@ class Shimakaze_OT_shp_pass(ShimakazeSDKBaseOperator):
 
     def execute(self, context) -> set[OperatorReturnItems]:
         if not utils.apply_shp_pass_to_scene(context.scene, self.pass_name):
-            self.report({"ERROR"}, "当前场景不是有效的模板场景")
+            self.report({"ERROR"}, i18n.t("Current scene is not a valid template scene"))
             return {"CANCELLED"}
         context.scene.shimakaze_sdk.active_pass = self.pass_name
-        self.report({"INFO"}, f"已应用 {self.bl_label} 到当前场景")
+        self.report(
+            {"INFO"},
+            i18n.t("Applied {label} to the current scene").format(label=self.bl_label),
+        )
         return {"FINISHED"}
 
 
 class Shimakaze_OT_shp_object(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_object"
     bl_label = "Object"
-    bl_description = "物体通道：渲染物体本体，隐藏全部平面"
+    bl_description = "Object pass: render the model, hide all planes"
     pass_name = "object"
 
 
 class Shimakaze_OT_shp_buildup(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_buildup"
     bl_label = "Buildup"
-    bl_description = "建造动画通道：蓝面可见，用于渲染建造动画"
+    bl_description = "Buildup pass: blue plane visible for the construction animation"
     pass_name = "buildup"
 
 
 class Shimakaze_OT_shp_shadow(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_shadow"
     bl_label = "Shadow"
-    bl_description = "阴影通道：阴影面可见，用于渲染阴影"
+    bl_description = "Shadow pass: shadow planes visible"
     pass_name = "shadow"
 
 
 class Shimakaze_OT_shp_preview(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_preview"
     bl_label = "Preview"
-    bl_description = "预览通道：灰面可见"
+    bl_description = "Preview pass: grey plane visible"
     pass_name = "preview"
 
 
 class Shimakaze_OT_shp_reset(Shimakaze_OT_shp_pass):
     bl_idname = "shimakaze.shp_reset"
     bl_label = "Reset"
-    bl_description = "重置为默认状态：灰面可见，所有通道开关关闭"
+    bl_description = "Reset to default: grey plane visible, all pass switches off"
     pass_name = "reset"
 
 
 class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
     bl_idname = "shimakaze.render_batch"
-    bl_label = "批量渲染"
-    bl_description = "按方向数批量渲染 SHP 动画帧：每方向渲染动画并旋转目标"
+    bl_label = "Batch Render"
+    bl_description = "Render SHP animation frames per direction, rotating the target after each"
     bl_options = {"REGISTER"}
 
     _target = None
@@ -183,28 +187,29 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
     _progress_started = False
 
     def execute(self, context) -> set[OperatorReturnItems]:
+        t = i18n.t
         scene = context.scene
         settings = scene.shimakaze_sdk
         if not settings.is_imported:
-            self.report({"ERROR"}, "请先导入模板场景再批量渲染")
+            self.report({"ERROR"}, t("Import a template scene before batch rendering"))
             return {"CANCELLED"}
 
         target = settings.target
         if target is None:
-            self.report({"ERROR"}, "未找到目标空对象")
+            self.report({"ERROR"}, t("Target empty not found"))
             return {"CANCELLED"}
 
         faces = settings.faces
         if not utils.is_valid_direction_count(faces):
-            self.report({"ERROR"}, "方向数必须是 1 或 8 的倍数")
+            self.report({"ERROR"}, t("Direction count must be 1 or a multiple of 8"))
             return {"CANCELLED"}
 
         pass_name = settings.active_pass
         if pass_name not in utils.SHP_PASSES:
-            self.report({"ERROR"}, f"无效的渲染通道：{pass_name}")
+            self.report({"ERROR"}, t("Invalid render pass: {name}").format(name=pass_name))
             return {"CANCELLED"}
         if not utils.apply_shp_pass_to_scene(scene, pass_name):
-            self.report({"ERROR"}, "当前场景不是有效的模板场景")
+            self.report({"ERROR"}, t("Current scene is not a valid template scene"))
             return {"CANCELLED"}
 
         step = radians(360 / faces)
@@ -268,8 +273,14 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
             return
         pct = round(done / total * 100) if total else 100
         workspace.status_text_set(
-            f"批量渲染 {self._pass_name}：方向 {self._face + 1}/{self._faces}，"
-            f"帧 {self._frame}/{self._frame_end}（{pct}%）"
+            i18n.t("Batch render {name}: face {face}/{faces}, frame {frame}/{end} ({pct}%)").format(
+                name=self._pass_name,
+                face=self._face + 1,
+                faces=self._faces,
+                frame=self._frame,
+                end=self._frame_end,
+                pct=pct,
+            )
         )
 
     def _frame_path(self) -> str:
@@ -296,27 +307,33 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
         if self._target is not None:
             self._target.rotation_euler[2] = radians(225)
         if cancelled:
-            self.report({"WARNING"}, "批量渲染已取消")
+            self.report({"WARNING"}, i18n.t("Batch render cancelled"))
         else:
-            self.report({"INFO"}, f"批量渲染完成：{self._pass_name} × {self._faces} 方向")
+            self.report(
+                {"INFO"},
+                i18n.t("Batch render done: {name} × {faces} directions").format(
+                    name=self._pass_name, faces=self._faces
+                ),
+            )
 
 
 class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
     bl_idname = "shimakaze.download_template"
-    bl_label = "下载模板"
-    bl_description = "异步下载缺少的 CnC 模板文件（固定版本）"
+    bl_label = "Download Template"
+    bl_description = "Download the missing CnC template file asynchronously (pinned version)"
     bl_options = {"REGISTER"}
 
     _state = None
     _timer = None
 
     def execute(self, context) -> set[OperatorReturnItems]:
+        t = i18n.t
         path = utils.get_cnc_template_path()
         if path.is_file():
-            self.report({"INFO"}, f"模板已就绪：{path.name}")
+            self.report({"INFO"}, t("Template ready: {name}").format(name=path.name))
             return {"FINISHED"}
         if self._state is not None:
-            self.report({"INFO"}, "模板已在下载中")
+            self.report({"INFO"}, t("Template is already downloading"))
             return {"CANCELLED"}
 
         window = context.window
@@ -324,12 +341,18 @@ class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
             try:
                 utils.ensure_template()
             except Exception as exc:
-                self.report({"ERROR"}, f"下载模板失败：{exc}")
+                self.report({"ERROR"}, t("Template download failed: {exc}").format(exc=exc))
                 return {"CANCELLED"}
-            self.report({"INFO"}, "模板已就绪")
+            self.report({"INFO"}, t("Template ready"))
             return {"FINISHED"}
 
-        self._state = {"ok": None, "message": "", "current": 0, "total": 0, "phase": "正在连接…"}
+        self._state = {
+            "ok": None,
+            "message": "",
+            "current": 0,
+            "total": 0,
+            "phase": i18n.t("Connecting…"),
+        }
         self._timer = None
         thread = threading.Thread(target=self._worker, args=(self._state,), daemon=True)
         thread.start()
@@ -355,12 +378,13 @@ class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
                 set_phase=lambda text: state.update(phase=text),
             )
             state["ok"] = True
-            state["message"] = "下载完成"
+            state["message"] = i18n.t("Download complete")
         except Exception as exc:
             state["ok"] = False
             state["message"] = str(exc)
 
     def modal(self, context, event) -> set[OperatorReturnItems]:
+        t = i18n.t
         if event.type != "TIMER":
             return {"RUNNING_MODAL"}
         state = self._state
@@ -375,7 +399,9 @@ class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
             workspace = context.workspace
             if workspace is not None:
                 pct = f" {min(int(state['current'] * 100 / total), 100)}%" if total else ""
-                workspace.status_text_set(f"下载模板 {state['phase']}{pct}")
+                workspace.status_text_set(
+                    t("Download template {phase}{pct}").format(phase=state["phase"], pct=pct)
+                )
             return {"RUNNING_MODAL"}
 
         wm = context.window_manager
@@ -390,9 +416,10 @@ class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
         self._state = None
         if ok:
             path = utils.get_cnc_template_path()
-            self.report({"INFO"}, f"模板已就绪：{path.name}")
+            self.report({"INFO"}, t("Template ready: {name}").format(name=path.name))
         else:
-            self.report({"ERROR"}, f"下载模板失败：{state['message']}")
+            message = state["message"]
+            self.report({"ERROR"}, t("Template download failed: {exc}").format(exc=message))
         return {"FINISHED"}
 
 

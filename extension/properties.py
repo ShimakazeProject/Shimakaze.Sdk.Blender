@@ -4,9 +4,13 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import PropertyGroup
 
-from . import utils
+from . import i18n, utils
 
 __all__ = ("register", "unregister")
+
+
+def _update_language(self, context) -> None:
+    i18n.set_language(self.language)
 
 
 def _update_use_alpha(self, context) -> None:
@@ -26,48 +30,50 @@ class ShimakazeSceneSettings(PropertyGroup):
     """Per-scene SHP settings, including the scene's own target."""
 
     faces: IntProperty(
-        name="面数（方向数）",
-        description="SHP 方向数，必须是 1 或 8 的倍数",
+        name="Faces (directions)",
+        description="SHP direction count; must be 1 or a multiple of 8",
         default=8,
         min=1,
         step=8,
     )
 
     reverse: BoolProperty(
-        name="反向",
-        description="反向，用于制作 SHP 载具",
+        name="Reverse",
+        description="Render in reverse direction (for SHP vehicles)",
         default=False,
     )
 
     target: PointerProperty(
-        name="目标",
-        description="本场景的目标空对象名称",
+        name="Target",
+        description="Target empty object of this scene",
         type=bpy.types.Object,
     )
 
     is_imported: BoolProperty(
-        name="模板导入",
-        description="是否从 CnC 模板导入的场景（显示渲染通道）",
+        name="Imported from template",
+        description="Whether the scene was imported from a CnC template (shows render passes)",
         default=False,
     )
 
     active_pass: StringProperty(
-        name="当前通道",
-        description="最近应用的渲染通道（批量渲染使用）",
+        name="Active Pass",
+        description="Last applied render pass (used by batch render)",
         default="object",
         maxlen=32,
     )
 
     use_alpha: BoolProperty(
         name="Alpha",
-        description="勾选后启用合成器中的 Alpha 开关",
+        description="Enable the compositor's Alpha switch",
         default=False,
         update=_update_use_alpha,
     )
 
     output_template: StringProperty(
-        name="输出模板",
-        description="批量渲染输出路径模板，支持 <template>/<face>，帧号由 Blender 追加",
+        name="Output Template",
+        description=(
+            "Batch render output path template; supports <template>/<face>, frame added by Blender"
+        ),
         default="//<template>/<face>/",
         maxlen=512,
     )
@@ -76,15 +82,26 @@ class ShimakazeSceneSettings(PropertyGroup):
 class ShimakazeWindowSettings(PropertyGroup):
     """Global (window-level) settings that must survive scene switches."""
 
+    language: EnumProperty(
+        name="Language",
+        description="Add-on interface language",
+        items=(
+            ("EN", "English", "English UI"),
+            ("ZH", "中文", "简体中文界面"),
+        ),
+        default="ZH",
+        update=_update_language,
+    )
+
     cnc_game: EnumProperty(
-        name="游戏",
-        description="选择要导入的 CnC 游戏模板",
+        name="Game",
+        description="CnC game template to import",
         items=utils.game_enum_items,
     )
 
     cnc_variant: EnumProperty(
-        name="变体",
-        description="选择模板场景变体（标准 / Effects / 步兵）",
+        name="Variant",
+        description="Template scene variant (Standard / Effects / Infantry)",
         items=utils.variant_enum_items,
     )
 

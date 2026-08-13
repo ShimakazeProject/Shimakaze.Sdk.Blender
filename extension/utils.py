@@ -20,6 +20,7 @@ from .adaptations import (
     get_template_file_name,
     repair_compositor,
 )
+from .i18n import t
 
 if TYPE_CHECKING:
     from bpy.types import Collection, Object
@@ -105,7 +106,7 @@ def _download_template(destination: Path, report_hook=None, set_phase=None) -> N
             set_phase(text)
 
     api = f"https://api.github.com/repos/{CNC_TEMPLATE_REPO}/releases/tags/{CNC_TEMPLATE_VERSION}"
-    phase("正在连接…")
+    phase(t("Connecting…"))
     with urllib.request.urlopen(api, timeout=30) as response:
         release = json.load(response)
 
@@ -114,21 +115,22 @@ def _download_template(destination: Path, report_hook=None, set_phase=None) -> N
     match = [a for a in assets if keyword in a["name"].lower()]
     asset = (match or assets or [None])[0]
     if asset is None:
-        raise RuntimeError(f"release {CNC_TEMPLATE_VERSION} 中没有 .zip 资源")
+        msg = t("No .zip asset in release {version}").format(version=CNC_TEMPLATE_VERSION)
+        raise RuntimeError(msg)
     url = asset["browser_download_url"]
 
-    phase("正在下载…")
+    phase(t("Downloading…"))
     with tempfile.TemporaryDirectory() as tmp:
         zip_path = Path(tmp) / "template.zip"
         if report_hook is not None:
             urllib.request.urlretrieve(url, zip_path, reporthook=report_hook)
         else:
             urllib.request.urlretrieve(url, zip_path)
-        phase("正在解压…")
+        phase(t("Extracting…"))
         with zipfile.ZipFile(zip_path) as archive:
             blends = [n for n in archive.namelist() if n.lower().endswith(".blend")]
             if not blends:
-                raise RuntimeError("模板压缩包中没有 .blend 文件")
+                raise RuntimeError(t("No .blend file in the template archive"))
             name = blends[0]
             archive.extract(name, tmp)
             destination.parent.mkdir(parents=True, exist_ok=True)
