@@ -32,15 +32,20 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    container:
-      image: blenderkit/headless-blender:blender-4.5
     steps:
       - uses: actions/checkout@v7
+
+      - name: Download Blender 4.5
+        run: |
+          curl -fsSL -o blender.tar.xz \
+            https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
+          mkdir -p blender
+          tar -xf blender.tar.xz -C blender --strip-components=1
 
       - name: Build extension
         run: |
           mkdir -p dist
-          blender --command extension build --source-dir extension --output-dir dist
+          ./blender/blender --command extension build --source-dir extension --output-dir dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
