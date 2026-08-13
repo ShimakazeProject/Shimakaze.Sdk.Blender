@@ -8,9 +8,9 @@ jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -33,22 +33,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Download Blender 4.5
-        run: |
-          curl -fsSL -o blender.tar.xz \
-            https://download.blender.org/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
-          mkdir -p blender
-          tar -xf blender.tar.xz -C blender --strip-components=1
+      - uses: moguri/setup-blender@v1
+        with:
+          blender-version: '4.5'
 
       - name: Build extension
         run: |
           mkdir -p dist
-          ./blender/blender --command extension build --source-dir extension --output-dir dist
+          blender --command extension build --source-dir extension --output-dir dist
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: shimakaze-sdk
           path: dist/*.zip
+
