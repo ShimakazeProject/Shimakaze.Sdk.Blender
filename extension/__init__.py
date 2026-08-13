@@ -38,6 +38,9 @@ _ADDON_MODULES = ("properties", "operators", "ui")
 
 def register() -> None:
     """Register every sub-module of the add-on."""
+    from . import i18n
+
+    i18n.refresh_language()
     for module_name in _ADDON_MODULES:
         module = importlib.import_module(f"{__name__}.{module_name}")
         module.register()

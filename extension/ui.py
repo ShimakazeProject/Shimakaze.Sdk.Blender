@@ -40,7 +40,7 @@ class Shimakaze_PT_scene(Panel):
     def draw(self, context):
         cnc_settings = context.window_manager.shimakaze_cnc
         scene_settings = context.scene.shimakaze_sdk
-        i18n.set_language(cnc_settings.language)
+        i18n.refresh_language()
         t = i18n.t
         layout = self.layout
 
@@ -52,8 +52,6 @@ class Shimakaze_PT_scene(Panel):
             box.alert = True
             box.label(text=t("Template file not found"), icon="ERROR")
             box.operator("shimakaze.download_template", text=t("Download Template"))
-
-        layout.prop(cnc_settings, "language", text=t("Language"))
 
         if not scene_settings.is_imported:
             layout.label(text=t("CnC Template Import"))
@@ -106,7 +104,7 @@ class Shimakaze_PT_materials(Panel):
 
     def draw(self, context):
         scene_settings = context.scene.shimakaze_sdk
-        i18n.set_language(context.window_manager.shimakaze_cnc.language)
+        i18n.refresh_language()
         t = i18n.t
         layout = self.layout
 

@@ -11,13 +11,9 @@ from bpy.props import (
 )
 from bpy.types import PropertyGroup
 
-from . import i18n, utils
+from . import utils
 
 __all__ = ("register", "unregister")
-
-
-def _update_language(self, context) -> None:
-    i18n.set_language(self.language)
 
 
 def _update_use_alpha(self, context) -> None:
@@ -103,17 +99,6 @@ class ShimakazeSceneSettings(PropertyGroup):
 
 class ShimakazeWindowSettings(PropertyGroup):
     """Global (window-level) settings that must survive scene switches."""
-
-    language: EnumProperty(
-        name="Language",
-        description="Add-on interface language",
-        items=(
-            ("EN", "English", "English UI"),
-            ("ZH", "中文", "简体中文界面"),
-        ),
-        default="ZH",
-        update=_update_language,
-    )
 
     cnc_game: EnumProperty(
         name="Game",

@@ -336,6 +336,10 @@ class Shimakaze_OT_download_template(ShimakazeSDKBaseOperator):
             self.report({"INFO"}, t("Template is already downloading"))
             return {"CANCELLED"}
 
+        # Capture the interface language on the main thread before the worker
+        # thread (which must not touch bpy) runs and calls t().
+        i18n.refresh_language()
+
         window = context.window
         if window is None:
             try:

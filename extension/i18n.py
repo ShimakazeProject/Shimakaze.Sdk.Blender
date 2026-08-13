@@ -1,9 +1,9 @@
 """Minimal i18n for the add-on (English / 简体中文).
 
 Strings in the codebase are English source; ``t()`` returns the Simplified
-Chinese translation when the add-on language is set to Chinese. Static
-tooltips/labels that Blender reads at registration time stay English; the
-panel and report messages are localized at draw/runtime via ``t()``.
+Chinese translation when Blender's interface language is Chinese. The language
+is read from ``bpy.context.preferences.view.language`` and cached in
+``_LOCALE`` so ``t()`` can also run on worker threads without touching bpy.
 """
 
 from __future__ import annotations
@@ -11,8 +11,28 @@ from __future__ import annotations
 LANG_EN = "EN"
 LANG_ZH = "ZH"
 
-#: Add-on language, defaulting to Chinese (preserving the current behavior).
+#: Cached add-on language, kept in sync with Blender's interface language.
 _LOCALE = LANG_ZH
+
+
+def refresh_language() -> None:
+    """Sync the add-on language with Blender's interface language."""
+    global _LOCALE
+    import bpy
+
+    try:
+        language = bpy.context.preferences.view.language
+    except (AttributeError, RuntimeError):
+        return
+    _LOCALE = LANG_ZH if str(language).lower().startswith("zh") else LANG_EN
+
+
+def t(text: str) -> str:
+    """Return ``text`` translated to the add-on's current language."""
+    if _LOCALE == LANG_ZH:
+        return _ZH.get(text, text)
+    return text
+
 
 #: English source -> Simplified Chinese.
 _ZH: dict[str, str] = {
@@ -27,7 +47,6 @@ _ZH: dict[str, str] = {
     "Active pass: {name}": "当前通道：{name}",
     "Download Template": "下载模板",
     "Batch Render": "批量渲染",
-    "Language": "语言",
     "Holdout Materials": "阻隔材质",
     "Excluded Materials": "排除的材质",
     "Apply Holdout": "应用阻隔着色器",
@@ -108,17 +127,3 @@ _ZH: dict[str, str] = {
     "No .zip asset in release {version}": "release {version} 中没有 .zip 资源",
     "No .blend file in the template archive": "模板压缩包中没有 .blend 文件",
 }
-
-
-def set_language(locale: str) -> None:
-    """Set the add-on UI language (LANG_EN or LANG_ZH)."""
-    global _LOCALE
-    if locale in (LANG_EN, LANG_ZH):
-        _LOCALE = locale
-
-
-def t(text: str) -> str:
-    """Return ``text`` translated to the add-on's current language."""
-    if _LOCALE == LANG_ZH:
-        return _ZH.get(text, text)
-    return text
