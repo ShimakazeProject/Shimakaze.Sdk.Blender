@@ -1,4 +1,4 @@
-"""Helpers for the CnC (SHP) template import and render passes.
+"""Helpers for the CnC (SHP) template import and render setup.
 
 Everything in this module must be importable and testable without Blender,
 so keep Blender imports inside the functions that need them.
@@ -13,12 +13,12 @@ import urllib.request
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 
 from .adaptations import (
     current_template_renderer,
+    eevee_engine_name,
     get_template_file_name,
-    repair_compositor,
 )
 from .i18n import t
 
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 # adapting to a newer template; different versions require different code, so
 # never use "latest".
 CNC_TEMPLATE_REPO = "Zawaro/blender-cnc-templates"
-CNC_TEMPLATE_VERSION = "v1.1.0"
+CNC_TEMPLATE_VERSION = "v1.2.0"
 
 
 #: CnC games selectable in the wizard, keyed by enum identifier.
@@ -225,130 +225,168 @@ def collect_objects_to_link(objects: Iterable[Object]) -> set[Object]:
     return result
 
 
-class ShpPassConfig(TypedDict):
-    switch_prefixes: tuple[str, ...]
-    planes: dict[str, bool]
+#: Render engines selectable in the panel: Cycles and EEVEE.
+RENDER_ENGINES: tuple[str, str] = ("CYCLES", "EEVEE")
 
+#: Render targets (passes) selectable in the panel, in template order.
+RENDER_TARGETS: tuple[str, ...] = ("object", "shadow", "buildup", "preview", "reset")
 
-#: Render-pass setups matching the template compositor switch chain. Switches
-#: are matched by name prefix so the same setup works across template
-#: variants/renderers that keep the Object/Buildup/Shadow/Preview naming.
-SHP_PASSES: dict[str, ShpPassConfig] = {
+#: Compositor switch chain the template wires the pass output through.
+RENDER_SWITCH_CHAIN: tuple[str, ...] = (
+    "Object",
+    "Buildup.Cycles",
+    "Buildup.Eevee",
+    "Shadow.Cycles",
+    "Shadow.Eevee",
+    "Preview.Cycles",
+    "Preview.Eevee",
+)
+
+#: Plane visibility per target, per engine. Keys are object name parts
+#: (``holdout``, ``shadow``, ``grey``, ...) that appear right after the
+#: ``Plane.`` prefix; the value is the ``hide_render`` flag. Mirrors the
+#: template's own ``<Engine>.Render.<Target>`` scripts exactly (only the
+#: Object pass shows ambient and the Shadow pass shows holdout in Cycles).
+RENDER_PLANES: dict[str, dict[str, dict[str, bool]]] = {
     "object": {
-        "switch_prefixes": ("Object",),
-        "planes": {
-            "ambient": True,
+        "CYCLES": {
+            "holdout": True,
+            "holdout2": True,
+            "shadow": True,
+            "shadow2": True,
             "blue": True,
             "grey": True,
-            "holdout2": True,
-            "shadow2": True,
-            "shadow": True,
+            "ambient": False,
+        },
+        "EEVEE": {
             "holdout": True,
+            "holdout2": True,
+            "shadow": True,
+            "shadow2": True,
+            "blue": True,
+            "grey": True,
+            "ambient": True,
         },
     },
     "buildup": {
-        "switch_prefixes": ("Buildup",),
-        "planes": {
-            "ambient": True,
-            "blue": False,
-            "grey": True,
-            "holdout2": True,
-            "shadow2": True,
-            "shadow": True,
+        "CYCLES": {
             "holdout": True,
+            "holdout2": False,
+            "shadow": True,
+            "shadow2": True,
+            "blue": True,
+            "grey": True,
+            "ambient": True,
+        },
+        "EEVEE": {
+            "holdout": True,
+            "holdout2": False,
+            "shadow": True,
+            "shadow2": True,
+            "blue": True,
+            "grey": True,
+            "ambient": True,
         },
     },
     "shadow": {
-        "switch_prefixes": ("Shadow",),
-        "planes": {
-            "ambient": True,
+        "CYCLES": {
+            "holdout": False,
+            "holdout2": True,
+            "shadow": False,
+            "shadow2": True,
             "blue": True,
             "grey": True,
-            "holdout2": True,
-            "shadow2": False,
-            "shadow": False,
+            "ambient": True,
+        },
+        "EEVEE": {
             "holdout": True,
+            "holdout2": True,
+            "shadow": False,
+            "shadow2": True,
+            "blue": True,
+            "grey": True,
+            "ambient": True,
         },
     },
     "preview": {
-        "switch_prefixes": ("Preview",),
-        "planes": {
-            "ambient": True,
+        "CYCLES": {
+            "holdout": False,
+            "holdout2": False,
+            "shadow": False,
+            "shadow2": False,
             "blue": True,
-            "grey": False,
-            "holdout2": True,
-            "shadow2": True,
-            "shadow": True,
-            "holdout": True,
+            "grey": True,
+            "ambient": True,
+        },
+        "EEVEE": {
+            "holdout": False,
+            "holdout2": False,
+            "shadow": False,
+            "shadow2": False,
+            "blue": True,
+            "grey": True,
+            "ambient": True,
         },
     },
     "reset": {
-        "switch_prefixes": (),
-        "planes": {
-            "ambient": True,
+        "CYCLES": {
+            "holdout": True,
+            "holdout2": True,
+            "shadow": True,
+            "shadow2": True,
             "blue": True,
             "grey": False,
-            "holdout2": True,
-            "shadow2": True,
-            "shadow": True,
+            "ambient": True,
+        },
+        "EEVEE": {
             "holdout": True,
+            "holdout2": True,
+            "shadow": True,
+            "shadow2": True,
+            "blue": True,
+            "grey": False,
+            "ambient": True,
         },
     },
 }
 
-#: Per-renderer tweaks to the base pass config, keyed by renderer then pass.
-#: Templates that rename their compositor switches or planes can override
-#: ``switch_prefixes`` / ``planes`` here.
-SHP_PASS_OVERRIDES: dict[str, dict[str, ShpPassConfig]] = {}
+#: Render-quality settings per target: (filter_width, filter_size, single_layer).
+RENDER_QUALITY: dict[str, tuple[float, float, bool]] = {
+    "object": (0.9, 0.7, True),
+    "shadow": (0.01, 0.01, False),
+    "buildup": (0.9, 0.7, True),
+    "preview": (0.9, 0.7, True),
+    "reset": (0.9, 0.7, True),
+}
 
 
-def _pass_config(pass_name: str) -> ShpPassConfig:
-    """Resolve the pass config, applying the current renderer's overrides."""
-    base = SHP_PASSES[pass_name]
-    override = SHP_PASS_OVERRIDES.get(current_template_renderer(), {}).get(pass_name)
-    if override is None:
-        return base
-    return {
-        "switch_prefixes": override.get("switch_prefixes", base["switch_prefixes"]),
-        "planes": {**base["planes"], **override.get("planes", {})},
+def resolve_plane_suffix(game: str, variant: str) -> str:
+    """Compute the plane object suffix for a game + variant (e.g. ``RA2.INF``)."""
+    code = CNC_TEMPLATE_GAME[game][1]
+    variant_suffix = CNC_VARIANT_OPTIONS[variant][1]
+    return f"{code}{variant_suffix}"
+
+
+def render_engine_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:
+    """Build the EnumProperty items for the render engine selector."""
+    return [
+        (engine, "Cycles" if engine == "CYCLES" else "EEVEE", f"Render with {engine}")
+        for engine in RENDER_ENGINES
+    ]
+
+
+def render_target_enum_items(self=None, context=None) -> list[tuple[str, str, str]]:
+    """Build the EnumProperty items for the render target selector."""
+    labels = {
+        "object": "Object",
+        "shadow": "Shadow",
+        "buildup": "Buildup",
+        "preview": "Preview",
+        "reset": "Reset",
     }
-
-
-def apply_shp_pass_to_scene(scene, pass_name: str) -> bool:
-    """Apply a render-pass setup to a single scene.
-
-    Toggles the pass switch chain and the visibility of every ``Plane.*``
-    object in the scene (detected by name, so imported/renamed scenes work
-    too). Also repairs the compositor wiring. Returns True when the scene has
-    a compositor to drive.
-    """
-    import bpy
-
-    config = _pass_config(pass_name)
-    node_tree = get_scene_compositor(scene)
-    if node_tree is None:
-        return False
-
-    repair_compositor(node_tree)
-    for node in node_tree.nodes.values():
-        if node is not None and node.type == "SWITCH":
-            on = any(node.name.startswith(prefix) for prefix in config["switch_prefixes"])
-            set_switch(node, on)
-
-    alpha = node_tree.nodes.get("Alpha")
-    if alpha is not None:
-        set_switch(alpha, scene.shimakaze_sdk.use_alpha)
-
-    scene.render.image_settings.color_mode = "RGBA" if scene.shimakaze_sdk.use_alpha else "RGB"
-
-    for obj in bpy.data.objects:
-        if obj.name not in scene.objects or not obj.name.startswith("Plane."):
-            continue
-        parts = obj.name.split(".")
-        if len(parts) >= 2 and parts[1] in config["planes"]:
-            obj.hide_render = config["planes"][parts[1]]
-
-    return True
+    return [
+        (target, labels[target], f"Render the {labels[target]} pass") for target in RENDER_TARGETS
+    ]
 
 
 def set_switch(node, value: bool) -> None:
@@ -363,6 +401,68 @@ def set_switch(node, value: bool) -> None:
         switch_input = node.inputs.get("Switch")
         if switch_input is not None:
             switch_input.default_value = value
+
+
+def apply_render_setup(scene, engine: str, use_alpha: bool, target: str) -> bool:
+    """Apply a render-engine + alpha + target setup to a single scene.
+
+    This is the unified, generic replacement for the template's many
+    ``<Engine>.Render.<Target>`` and ``Alpha.Enable/Disable`` scripts: it
+    picks the engine, toggles the pass switch chain, flips the Alpha switch,
+    sets the output color mode, and updates plane visibility. Returns True
+    when the scene has a compositor to drive.
+    """
+    import bpy
+
+    if engine not in RENDER_ENGINES or target not in RENDER_TARGETS:
+        return False
+
+    node_tree = get_scene_compositor(scene)
+    if node_tree is None:
+        return False
+
+    scene.render.engine = "CYCLES" if engine == "CYCLES" else eevee_engine_name()
+
+    filter_width, filter_size, single_layer = RENDER_QUALITY[target]
+    scene.cycles.filter_width = filter_width
+    scene.render.filter_size = filter_size
+    scene.render.use_single_layer = single_layer
+
+    # Toggle the pass switch chain: exactly one of the per-engine switches
+    # (or "Object") is on, matching the template's render scripts.
+    switch_on = None
+    if target == "object":
+        switch_on = "Object"
+    elif target != "reset":
+        engine_suffix = "Cycles" if engine == "CYCLES" else "Eevee"
+        switch_on = f"{target.title()}.{engine_suffix}"
+    for name in RENDER_SWITCH_CHAIN:
+        node = node_tree.nodes.get(name)
+        if node is not None:
+            set_switch(node, name == switch_on)
+
+    alpha = node_tree.nodes.get("Alpha")
+    if alpha is not None:
+        set_switch(alpha, use_alpha)
+    if use_alpha:
+        scene.render.image_settings.file_format = "PNG"
+        scene.render.image_settings.color_mode = "RGBA"
+    else:
+        scene.render.image_settings.color_mode = "RGB"
+
+    planes = RENDER_PLANES[target][engine]
+    for obj in bpy.data.objects:
+        if obj.name not in scene.objects:
+            continue
+        if obj.name.startswith("Sun."):
+            obj.hide_render = False
+            continue
+        for kind, hidden in planes.items():
+            if obj.name.startswith(f"Plane.{kind}."):
+                obj.hide_render = hidden
+                break
+
+    return True
 
 
 def apply_holdout_shader(material) -> None:

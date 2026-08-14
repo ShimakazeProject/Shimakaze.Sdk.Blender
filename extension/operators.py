@@ -72,11 +72,8 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         new_scene = bpy.data.scenes[appended]
         new_scene.name = final_scene
         new_scene.shimakaze_sdk.is_imported = True
+        new_scene.shimakaze_sdk.plane_suffix = utils.resolve_plane_suffix(game, variant)
         context.window.scene = new_scene
-
-        compositor = utils.get_scene_compositor(new_scene)
-        if compositor is not None:
-            utils.repair_compositor(compositor)
 
         container = utils.get_scene_container_collection(new_scene)
         objects_to_link = utils.collect_objects_to_link(selected_objects)
@@ -88,6 +85,11 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         for obj in objects_to_link:
             if obj.parent not in objects_to_link:
                 obj.parent = target
+
+        settings = new_scene.shimakaze_sdk
+        utils.apply_render_setup(
+            new_scene, settings.render_engine, settings.use_alpha, settings.render_target
+        )
 
         self.report(
             {"INFO"},
@@ -116,58 +118,6 @@ class Shimakaze_OT_import_cnc_scene(ShimakazeSDKBaseOperator):
         return target
 
 
-class Shimakaze_OT_shp_pass(ShimakazeSDKBaseOperator):
-    """Apply one SHP render pass to the active scene."""
-
-    pass_name: str = ""
-
-    def execute(self, context) -> set[OperatorReturnItems]:
-        if not utils.apply_shp_pass_to_scene(context.scene, self.pass_name):
-            self.report({"ERROR"}, i18n.t("Current scene is not a valid template scene"))
-            return {"CANCELLED"}
-        context.scene.shimakaze_sdk.active_pass = self.pass_name
-        self.report(
-            {"INFO"},
-            i18n.t("Applied {label} to the current scene").format(label=self.bl_label),
-        )
-        return {"FINISHED"}
-
-
-class Shimakaze_OT_shp_object(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_object"
-    bl_label = "Object"
-    bl_description = "Object pass: render the model, hide all planes"
-    pass_name = "object"
-
-
-class Shimakaze_OT_shp_buildup(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_buildup"
-    bl_label = "Buildup"
-    bl_description = "Buildup pass: blue plane visible for the construction animation"
-    pass_name = "buildup"
-
-
-class Shimakaze_OT_shp_shadow(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_shadow"
-    bl_label = "Shadow"
-    bl_description = "Shadow pass: shadow planes visible"
-    pass_name = "shadow"
-
-
-class Shimakaze_OT_shp_preview(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_preview"
-    bl_label = "Preview"
-    bl_description = "Preview pass: grey plane visible"
-    pass_name = "preview"
-
-
-class Shimakaze_OT_shp_reset(Shimakaze_OT_shp_pass):
-    bl_idname = "shimakaze.shp_reset"
-    bl_label = "Reset"
-    bl_description = "Reset to default: grey plane visible, all pass switches off"
-    pass_name = "reset"
-
-
 class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
     bl_idname = "shimakaze.render_batch"
     bl_label = "Batch Render"
@@ -179,7 +129,7 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
     _frame_start = 0
     _frame_end = 0
     _step = 0.0
-    _pass_name = ""
+    _render_target = ""
     _template = ""
     _face = 0
     _frame = 0
@@ -204,11 +154,10 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
             self.report({"ERROR"}, t("Direction count must be 1 or a multiple of 8"))
             return {"CANCELLED"}
 
-        pass_name = settings.active_pass
-        if pass_name not in utils.SHP_PASSES:
-            self.report({"ERROR"}, t("Invalid render pass: {name}").format(name=pass_name))
-            return {"CANCELLED"}
-        if not utils.apply_shp_pass_to_scene(scene, pass_name):
+        render_target = settings.render_target
+        if not utils.apply_render_setup(
+            scene, settings.render_engine, settings.use_alpha, render_target
+        ):
             self.report({"ERROR"}, t("Current scene is not a valid template scene"))
             return {"CANCELLED"}
 
@@ -217,8 +166,8 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
         self._faces = faces
         self._frame_start = scene.frame_start
         self._frame_end = scene.frame_end
-        self._pass_name = pass_name
-        self._template = settings.output_template or "//<template>/<face>/"
+        self._render_target = render_target
+        self._template = settings.output_template or "//<target>/<face>/"
         self._step = -step if settings.reverse else step
         self._face = 0
         self._frame = scene.frame_start
@@ -274,7 +223,7 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
         pct = round(done / total * 100) if total else 100
         workspace.status_text_set(
             i18n.t("Batch render {name}: face {face}/{faces}, frame {frame}/{end} ({pct}%)").format(
-                name=self._pass_name,
+                name=self._render_target,
                 face=self._face + 1,
                 faces=self._faces,
                 frame=self._frame,
@@ -285,7 +234,7 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
 
     def _frame_path(self) -> str:
         """Build the per-frame output path from the output template."""
-        path = self._template.replace("<template>", self._pass_name)
+        path = self._template.replace("<target>", self._render_target)
         path = path.replace("<face>", str(self._face))
         if "<frame>" in path:
             path = path.replace("<frame>", f"{self._frame:04d}")
@@ -312,7 +261,7 @@ class Shimakaze_OT_render_batch(ShimakazeSDKBaseOperator):
             self.report(
                 {"INFO"},
                 i18n.t("Batch render done: {name} × {faces} directions").format(
-                    name=self._pass_name, faces=self._faces
+                    name=self._render_target, faces=self._faces
                 ),
             )
 
@@ -488,11 +437,6 @@ class Shimakaze_OT_apply_holdout(ShimakazeSDKBaseOperator):
 _CLASSES = (
     Shimakaze_OT_import_cnc_scene,
     Shimakaze_OT_download_template,
-    Shimakaze_OT_shp_object,
-    Shimakaze_OT_shp_buildup,
-    Shimakaze_OT_shp_shadow,
-    Shimakaze_OT_shp_preview,
-    Shimakaze_OT_shp_reset,
     Shimakaze_OT_render_batch,
     Shimakaze_OT_add_excluded_material,
     Shimakaze_OT_remove_excluded_material,

@@ -1,7 +1,7 @@
 """Version-specific template adaptations, selected at runtime.
 
 Each renderer (``eevee_next``, ``hi_five``) has its own sub-package exposing
-``get_template_file_name`` and ``repair_compositor`` under one consistent API.
+``get_template_file_name`` and ``eevee_engine_name`` under one consistent API.
 The dispatcher imports the matching sub-package for the running Blender.
 """
 
@@ -29,9 +29,6 @@ def get_template_file_name() -> str:
     return _renderer_module().get_template_file_name()
 
 
-def repair_compositor(node_tree) -> bool:
-    """Repair the template compositor for the running Blender's renderer."""
-    try:
-        return _renderer_module().repair_compositor(node_tree)
-    except ImportError:
-        return False
+def eevee_engine_name() -> str:
+    """Blender EEVEE engine identifier for the running Blender version."""
+    return _renderer_module().eevee_engine_name()

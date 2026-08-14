@@ -16,17 +16,17 @@ from . import utils
 __all__ = ("register", "unregister")
 
 
-def _update_use_alpha(self, context) -> None:
-    """Sync the compositor's Alpha switch and output color mode."""
+def _apply_render_setup(self, context) -> None:
+    """Re-apply the engine + alpha + target setup to the active scene."""
     scene = context.scene
     if scene is None:
         return
-    node_tree = utils.get_scene_compositor(scene)
-    if node_tree is not None:
-        alpha = node_tree.nodes.get("Alpha")
-        if alpha is not None:
-            utils.set_switch(alpha, self.use_alpha)
-    scene.render.image_settings.color_mode = "RGBA" if self.use_alpha else "RGB"
+    utils.apply_render_setup(
+        scene,
+        self.render_engine,
+        self.use_alpha,
+        self.render_target,
+    )
 
 
 class MaterialExclusion(PropertyGroup):
@@ -64,26 +64,42 @@ class ShimakazeSceneSettings(PropertyGroup):
         default=False,
     )
 
-    active_pass: StringProperty(
-        name="Active Pass",
-        description="Last applied render pass (used by batch render)",
-        default="object",
-        maxlen=32,
+    render_engine: EnumProperty(
+        name="Render Engine",
+        description="Render engine used for the scene",
+        items=utils.render_engine_enum_items,
+        default=0,
+        update=_apply_render_setup,
+    )
+
+    render_target: EnumProperty(
+        name="Render Target",
+        description="Render target (pass) applied to the scene",
+        items=utils.render_target_enum_items,
+        default=0,
+        update=_apply_render_setup,
     )
 
     use_alpha: BoolProperty(
         name="Alpha",
         description="Enable the compositor's Alpha switch",
         default=False,
-        update=_update_use_alpha,
+        update=_apply_render_setup,
+    )
+
+    plane_suffix: StringProperty(
+        name="Plane Suffix",
+        description="Plane object suffix recorded at import (e.g. RA2.INF)",
+        default="RA2.INF",
+        maxlen=32,
     )
 
     output_template: StringProperty(
         name="Output Template",
         description=(
-            "Batch render output path template; supports <template>/<face>, frame added by Blender"
+            "Batch render output path template; supports <target>/<face>, frame added by Blender"
         ),
-        default="//<template>/<face>/",
+        default="//<target>/<face>/",
         maxlen=512,
     )
 

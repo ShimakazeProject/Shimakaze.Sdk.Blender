@@ -66,19 +66,11 @@ class Shimakaze_PT_scene(Panel):
 
         layout.prop(scene_settings, "target", text=t("Target"))
 
-        layout.label(text=t("Render Passes"))
-        column = layout.column(align=True)
-        row = column.row(align=True)
-        row.operator("shimakaze.shp_object", text="Object")
-        row.operator("shimakaze.shp_buildup", text="Buildup")
-        row.operator("shimakaze.shp_shadow", text="Shadow")
-        row = column.row(align=True)
-        row.operator("shimakaze.shp_preview", text="Preview")
-        row.operator("shimakaze.shp_reset", text="Reset")
-
+        layout.label(text=t("Render Setup"))
+        layout.prop(scene_settings, "render_engine", text=t("Render Engine"))
+        layout.prop(scene_settings, "render_target", text=t("Render Target"))
         layout.prop(scene_settings, "use_alpha", text=t("Alpha"))
-        pass_label = t("Active pass: {name}").format(name=scene_settings.active_pass.capitalize())
-        layout.label(text=pass_label)
+
         layout.prop(scene_settings, "output_template", text=t("Output Template"))
         layout.operator("shimakaze.render_batch", text=t("Batch Render"))
 
